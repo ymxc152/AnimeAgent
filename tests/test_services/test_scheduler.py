@@ -62,9 +62,6 @@ async def test_bootstrap_creates_schedule_for_active_subscription(db_session):
     """Scheduler should create a TaskSchedule for every active subscription."""
     sub = Subscription(
         title_romaji="Sousou no Frieren",
-        expected_airing_weekday=0,
-        expected_airing_time="10:00",
-        airing_timezone="Asia/Tokyo",
         status="ongoing",
     )
     store = Store(db_session)
@@ -90,9 +87,6 @@ async def test_bootstrap_skips_existing_schedules(db_session):
     """Scheduler should not overwrite existing TaskSchedule rows."""
     sub = Subscription(
         title_romaji="Sousou no Frieren",
-        expected_airing_weekday=0,
-        expected_airing_time="10:00",
-        airing_timezone="Asia/Tokyo",
         status="ongoing",
     )
     store = Store(db_session)
@@ -119,9 +113,6 @@ async def test_tick_executes_pending_episodes_for_due_schedules(db_session):
     """Tick should invoke the executor for each pending episode of a due subscription."""
     sub = Subscription(
         title_romaji="Sousou no Frieren",
-        expected_airing_weekday=0,
-        expected_airing_time="10:00",
-        airing_timezone="Asia/Tokyo",
         status="ongoing",
     )
     store = Store(db_session)
@@ -158,9 +149,6 @@ async def test_tick_reschedules_subscription_after_execution(db_session):
     """Tick should update next_run_at after processing a due subscription."""
     sub = Subscription(
         title_romaji="Sousou no Frieren",
-        expected_airing_weekday=0,
-        expected_airing_time="10:00",
-        airing_timezone="Asia/Tokyo",
         status="ongoing",
     )
     store = Store(db_session)
@@ -198,9 +186,6 @@ async def test_tick_uses_resume_after_when_executor_returns_it(db_session):
     """Tick should set next_run_at to the earliest resume_after returned by the executor."""
     sub = Subscription(
         title_romaji="Sousou no Frieren",
-        expected_airing_weekday=0,
-        expected_airing_time="10:00",
-        airing_timezone="Asia/Tokyo",
         status="ongoing",
     )
     store = Store(db_session)
@@ -228,6 +213,77 @@ async def test_tick_uses_resume_after_when_executor_returns_it(db_session):
 
     updated = await store.schedules.get_by_subscription(sub.id)
     assert updated.next_run_at == resume_at.replace(tzinfo=None)
+
+
+async def test_tick_skips_episodes_that_have_not_aired(db_session):
+    """Tick should not execute episodes whose expected air time is in the future."""
+    store = Store(db_session)
+    sub = Subscription(
+        title_romaji="Future Anime",
+        expected_airing_weekday=0,
+        expected_airing_time="10:00",
+        airing_timezone="Asia/Tokyo",
+        status="ongoing",
+        created_at=datetime.now(UTC),
+    )
+    await store.subscriptions.create(sub)
+
+    ep = Episode(subscription_id=sub.id, episode_number=1, status="pending")
+    await store.episodes.create(ep)
+
+    schedule = TaskSchedule(
+        subscription_id=sub.id,
+        next_run_at=datetime.now(UTC) - timedelta(minutes=5),
+    )
+    await store.schedules.create(schedule)
+
+    executor = AsyncMock()
+    scheduler = Scheduler(
+        session_factory=MagicMock(),
+        health_check=HealthCheck(tools=[]),
+        planner=EpisodePlanner(),
+        executor=executor,
+    )
+
+    await scheduler.tick(session=db_session)
+
+    executor.assert_not_awaited()
+
+
+async def test_tick_uses_episode_aired_at_for_gating(db_session):
+    """Tick should use episode.aired_at when available to decide gating."""
+    store = Store(db_session)
+    sub = Subscription(
+        title_romaji="Aired Anime",
+        status="ongoing",
+    )
+    await store.subscriptions.create(sub)
+
+    ep = Episode(
+        subscription_id=sub.id,
+        episode_number=1,
+        status="pending",
+        aired_at=datetime.now(UTC) - timedelta(hours=1),
+    )
+    await store.episodes.create(ep)
+
+    schedule = TaskSchedule(
+        subscription_id=sub.id,
+        next_run_at=datetime.now(UTC) - timedelta(minutes=5),
+    )
+    await store.schedules.create(schedule)
+
+    executor = AsyncMock()
+    scheduler = Scheduler(
+        session_factory=MagicMock(),
+        health_check=HealthCheck(tools=[]),
+        planner=EpisodePlanner(),
+        executor=executor,
+    )
+
+    await scheduler.tick(session=db_session)
+
+    executor.assert_awaited_once_with(sub.id, 1)
 
 
 async def test_start_passes_preflight_and_registers_jobs():

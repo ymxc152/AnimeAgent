@@ -2,8 +2,9 @@
 
 import asyncio
 from collections.abc import Awaitable, Callable
-from datetime import UTC, datetime
+from datetime import UTC, datetime, timedelta
 from typing import Any, cast
+from zoneinfo import ZoneInfo
 
 from apscheduler.schedulers.asyncio import AsyncIOScheduler
 from apscheduler.triggers.cron import CronTrigger
@@ -11,7 +12,7 @@ from loguru import logger
 from sqlalchemy.ext.asyncio import AsyncSession, async_sessionmaker
 
 from anime_agent.config import Settings, get_settings
-from anime_agent.memory.models import Subscription, TaskSchedule
+from anime_agent.memory.models import Episode, Subscription, TaskSchedule
 from anime_agent.memory.store import Store
 from anime_agent.services.discovery import DiscoveryService
 from anime_agent.services.episode_planner import EpisodePlanner
@@ -142,11 +143,20 @@ class Scheduler:
 
         resume_times: list[datetime] = []
         for i, episode in enumerate(active):
+            ep_number = cast(int, episode.episode_number)
+
+            if not self._episode_has_aired(subscription, episode):
+                logger.info(
+                    "Episode {} of subscription {} has not aired yet; skipping this tick",
+                    ep_number,
+                    subscription.id,
+                )
+                continue
+
             # Add delay between episodes to avoid RSS rate limiting
             if i > 0:
                 await asyncio.sleep(5)
 
-            ep_number = cast(int, episode.episode_number)
             try:
                 final = await self.executor(sub_id, ep_number)
                 resume_after = self._parse_resume_after(final)
@@ -180,6 +190,55 @@ class Scheduler:
         except ValueError:
             logger.warning("Invalid resume_after value: {}", resume_after)
             return None
+
+    def _episode_has_aired(self, subscription: Subscription, episode: Episode) -> bool:
+        """Return True if the episode is expected to have aired.
+
+        Priority:
+        1. If ``episode.aired_at`` is set, use it directly.
+        2. If the subscription has ``expected_airing_weekday``/``time``,
+           estimate the first air date from ``subscription.created_at`` and
+           assume each subsequent episode airs one week later.
+        3. Otherwise allow processing (no gating information).
+        """
+        if episode.aired_at is not None:
+            aired_at = episode.aired_at
+            if aired_at.tzinfo is None:
+                aired_at = aired_at.replace(tzinfo=UTC)
+            return datetime.now(UTC) >= aired_at.astimezone(UTC)
+
+        weekday = subscription.expected_airing_weekday
+        if weekday is None:
+            return True
+
+        airing_time = subscription.expected_airing_time or "00:00"
+        try:
+            hour, minute = map(int, str(airing_time).split(":")[:2])
+        except ValueError:
+            hour, minute = 0, 0
+
+        tz_name = subscription.airing_timezone or "Asia/Tokyo"
+        try:
+            tz = ZoneInfo(tz_name)
+        except Exception:  # noqa: BLE001
+            tz = ZoneInfo("Asia/Tokyo")
+
+        now = datetime.now(tz)
+        anchor = subscription.created_at or datetime.now(UTC)
+        if anchor.tzinfo is None:
+            anchor = anchor.replace(tzinfo=UTC)
+        anchor = anchor.astimezone(tz)
+
+        # First occurrence of weekday/time on or after the anchor.
+        days_ahead = (weekday - anchor.weekday()) % 7
+        first_air = anchor.replace(hour=hour, minute=minute, second=0, microsecond=0)
+        first_air += timedelta(days=days_ahead)
+        if first_air < anchor:
+            first_air += timedelta(weeks=1)
+
+        ep_number = cast(int, episode.episode_number)
+        episode_air_date = first_air + timedelta(weeks=ep_number - 1)
+        return now >= episode_air_date
 
     async def _default_executor(self, subscription_id: int, episode_number: int) -> dict[str, Any]:
         """Default no-op executor when none is provided."""
