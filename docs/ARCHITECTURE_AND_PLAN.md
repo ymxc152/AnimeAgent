@@ -17,10 +17,10 @@
 | Tool 层（Bangumi、AniList、TMDB、RSS、qB、Emby、Notify、FS、LLM） | ✅ 包含 | ✅ 已实现 | 10 个工具均存在，单元测试覆盖较好。 |
 | AnimeGardenTool（老番/全集 fallback） | 后续设计 | ✅ 已实现 | 见 `docs/OLD_ANIME_DOWNLOAD_DESIGN.md`；但缺少缓存与配置项。 |
 | Service 层（MetadataResolver、TorrentSelector、ContentFilter、EpisodePlanner、CompletionChecker、HealthCheck、TorrentHealth、DiscoveryService） | ✅ 包含 | ✅ 已实现 | 业务逻辑下沉到 `services/`，可独立测试。 |
-| Episode Agent（Episode Graph） | ✅ 核心 | ✅ 已串联 | `fetch_rss → match_torrent → send_download → poll_download → organize_files → refresh_emby`，含 `schedule_resume` / `handle_error`。 |
+| Episode Agent（Episode Graph） | ✅ 核心 | ✅ 已串联 | `fetch_rss → match_torrent → reflect_match → send_download → poll_download → organize_files → refresh_emby`，含 `schedule_resume` / `handle_error` / `human_review`。 |
 | Scheduler | ✅ 包含 | ✅ 已实现 | 启动预检、定时 tick、每周新番发现。 |
 | Web 面板 | ✅ 原生 HTML/JS | ✅ React/Vite SPA | 功能等效，API 与页面已实现。 |
-| 人工断点（human_review） | ✅ 包含 | ⚠️ 部分实现 | 节点与状态存在，但 `match_torrent` 未按规划触发 human_review。 |
+| 人工断点（human_review） | ✅ 包含 | ✅ 已实现 | `reflect_match` 在持续低置信度或 LLM 失败时最终路由到 `human_review`。 |
 | 对话层（Conversational Agent） | ✅ MVP | ❌ 未实现 | `anime_agent/agents/conversational/` 为空；无 NLU / 多轮澄清 / 聊天 API。 |
 | 调度层 LangGraph（Orchestrator Graph） | ✅ 保留 | ❌ 未实现 | 调度以 `services/discovery.py` + `services/scheduler.py` 函数实现，非 LangGraph。 |
 | `process_metadata` 节点 | ✅ 合并节点 | ❌ 未实现 | 内容分类与 TMDB 验证未落地， organize_files 默认季数为 1。 |
@@ -29,7 +29,7 @@
 
 ### 测试现状
 
-- **pytest**：`247 selected, 243 passed, 4 failed → 已修复为全绿`（`match_torrent` 低置信度/人工审批逻辑已修复；`test_web/test_frontend.py` 在 `frontend/dist` 不存在时跳过）。
+- **pytest**：`262 passed, 1 skipped, 14 deselected`（含新增 `reflect_match` 单元测试；`test_web/test_frontend.py` 在 `frontend/dist` 不存在时跳过）。
 - **Ruff**：27 个错误 → 已修复。
 - **MyPy**：10 个错误 → 已修复。
 - **Ruff**：27 个 lint 错误，主要在测试文件（重复导入、未使用变量等）。
@@ -39,9 +39,9 @@
 ### 明显 Bug 与代码问题
 
 1. ~~**`match_torrent` 低置信度处理未实现**~~ ✅ **已修复**
-   - 位置：`anime_agent/agents/episode/nodes/match_torrent.py:79-88`
-   - 修复：新增 `HIGH_CONFIDENCE_THRESHOLD=0.8` 与 `MAX_LOW_CONFIDENCE_ATTEMPTS=3`，置信度 0.5~0.8 时递增 `low_confidence_count` 并返回 `low_confidence`；达到 3 次后返回 `human_review` 并设置 `requires_human=True`。
-   - 验证：相关 3 个 pytest 用例通过。
+   - 位置：`anime_agent/agents/episode/nodes/match_torrent.py`
+   - 修复：新增 `HIGH_CONFIDENCE_THRESHOLD=0.8`，置信度 0.5~0.8 时递增 `low_confidence_count` 并返回 `low_confidence`；由新的 `reflect_match` 节点进行二次审查并决定后续路由。
+   - 验证：相关 pytest 用例通过。
 
 2. **Episode 模型存在 `torrent_hash` 与 `torrent_info_hash` 双字段**
    - 位置：`anime_agent/memory/models.py:69,72`
@@ -1195,9 +1195,15 @@ fetch_rss                    # 拉取 RSS，更新候选池
   ▼
 match_torrent                # LLM 匹配 + 规则预过滤
   │── 无匹配 ──▶ schedule_wait_rss ──▶ END
-  │── 置信度低 ──▶ schedule_wait_rss ──▶ END
-  │   （累计 3 次低置信度）──▶ human_review
   │── 匹配成功 ──▶ send_download
+  │── 置信度低 ──▶ reflect_match
+  │
+  ▼
+reflect_match                # 二次审查 + 决策
+  │── 自动批准 ──▶ send_download
+  │── 搜索更多 ──▶ search_resources ──▶ match_torrent
+  │── 等待 ──▶ schedule_wait_rss ──▶ END
+  │── 人工审查 ──▶ human_review
   │
   ▼
 send_download
@@ -1309,12 +1315,24 @@ handle_error ──▶ notify_user ──▶ END
 3. LLM 输出：`{hash, title, confidence}` 或 `{matched: false}`。
 4. **分支**：
    - `confidence >= 0.8`：进入 `send_download`。
-   - `0.5 <= confidence < 0.8`：`low_confidence_count += 1`。
-     - 若 `< 3`，进入 `schedule_wait_rss`。
-     - 若 `>= 3`，进入 `human_review`。
+   - `0.5 <= confidence < 0.8`：`low_confidence_count += 1`，进入 `reflect_match` 进行二次审查。
    - `confidence < 0.5` 或 `matched: false`：视为无匹配，进入 `schedule_wait_rss`。
 
-### 8.5 send_download
+### 8.5 reflect_match
+
+**目标**：在首次匹配置信度不足时，通过 LLM 重新评估候选并决定最佳下一步，减少不必要的人工干预。
+
+**逻辑**：
+1. 接收 `match_torrent` 返回的候选池、失败 hash、标题变体、集数、低置信度次数。
+2. 若候选池为空，优先进入 `search_resources` 扩大搜索范围。
+3. 调用 LLM 进行结构化推理，输出 `{action, info_hash, confidence, reason}`。
+4. **分支**：
+   - `auto_approve` 且 `confidence >= 0.75`：将候选写入 `matched_torrent`，进入 `send_download`。
+   - `search_resources` 且尚未搜索过：进入 `search_resources`，完成后回到 `match_torrent`。
+   - `wait`：进入 `schedule_wait_rss`，等待 RSS 更新。
+   - `human_review` 或 LLM 调用失败：进入 `human_review`。
+
+### 8.6 send_download
 
 **目标**：将种子推送给 qBittorrent。
 
