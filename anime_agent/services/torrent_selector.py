@@ -29,7 +29,7 @@ class TorrentSelector:
         failed_hashes: list[str],
     ) -> ToolOutput:
         """Pre-filter by episode number, then LLM selection."""
-        prefiltered = self._prefilter(candidates, episode_number, failed_hashes)
+        prefiltered = self._prefilter(candidates, episode_number, failed_hashes, title_variants)
 
         if not prefiltered:
             return ToolOutput(
@@ -100,8 +100,10 @@ class TorrentSelector:
         candidates: list[dict[str, Any]],
         episode_number: int,
         failed_hashes: list[str],
+        title_variants: list[str] | None = None,
     ) -> list[dict[str, Any]]:
-        """Keep only candidates that match the target episode number."""
+        """Keep only candidates that match the target episode number and title."""
+        title_tokens = self._extract_title_tokens(title_variants or [])
         result = []
         for candidate in candidates:
             info_hash = candidate.get("info_hash")
@@ -110,6 +112,9 @@ class TorrentSelector:
 
             title = candidate.get("title", "")
             if not self._episode_matches(title, episode_number):
+                continue
+
+            if title_tokens and not self._title_matches(title, title_tokens):
                 continue
 
             result.append(candidate)
@@ -136,6 +141,32 @@ class TorrentSelector:
             rf"第0?{ep}[集话話]",
         ]
         return any(re.search(pattern, title) for pattern in patterns)
+
+    def _extract_title_tokens(self, title_variants: list[str]) -> set[str]:
+        """Extract significant searchable tokens from title variants.
+
+        Skips all-CJK variants (RSS titles rarely contain Chinese/Japanese names)
+        and very short or generic tokens to avoid over-filtering.
+        """
+        tokens: set[str] = set()
+        generic = {"the", "and", "for", "are", "but", "not", "you", "all", "can", "had", "her", "was", "one", "our", "out", "day", "get", "has", "him", "his", "how", "its", "may", "new", "now", "old", "see", "two", "who", "boy", "did", "she", "use", "her", "way", "many", "oil", "sit", "set", "run", "eat", "far", "sea", "eye", "ago", "off", "too", "any", "say", "man", "try", "ask", "end", "why", "let", "put", "say", "she", "try", "way", "own", "say", "too", "old", "tell", "very", "when", "much", "would", "there", "their", "what", "said", "have", "each", "which", "will", "about", "could", "other", "after", "first", "never", "these", "think", "where", "being", "every", "great", "might", "shall", "still", "those", "while", "this", "that", "with", "from", "they", "know", "want", "been", "good", "much", "some", "time", "very", "when", "come", "here", "just", "like", "long", "make", "many", "over", "such", "take", "than", "them", "well", "were"}
+        for variant in title_variants:
+            if not variant:
+                continue
+            # Skip all-CJK variants; RSS titles usually use romaji for non-CJK shows.
+            if all("\u4e00" <= c <= "\u9fff" or "\u3040" <= c <= "\u309f" or "\u30a0" <= c <= "\u30ff" for c in variant if c.isalpha()):
+                continue
+            normalized = re.sub(r"[^a-zA-Z0-9]+", " ", variant).lower()
+            for token in normalized.split():
+                if len(token) >= 3 and token not in generic:
+                    tokens.add(token)
+        return tokens
+
+    def _title_matches(self, title: str, tokens: set[str]) -> bool:
+        """Return True if the candidate title contains at least one title token."""
+        normalized = re.sub(r"[^a-zA-Z0-9]+", " ", title).lower()
+        title_words = set(normalized.split())
+        return bool(title_words & tokens)
 
     # ------------------------------------------------------------------
     # Heuristic fallback (no LLM)
