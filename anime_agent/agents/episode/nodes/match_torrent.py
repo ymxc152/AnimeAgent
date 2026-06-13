@@ -10,12 +10,14 @@ from anime_agent.utils.logger import logger
 class MatchTorrentNode:
     """Select the best torrent candidate for the target episode.
 
-    Fully LLM-driven: no retry loop, no human review.  If the LLM returns a
-    match with confidence >= 0.5 the torrent is accepted.  Otherwise the
-    episode is rescheduled for a later tick (new RSS data may appear).
+    Uses rule-based pre-filtering + LLM selection.  High confidence matches
+    proceed directly to download; medium confidence matches accumulate up to
+    ``MAX_LOW_CONFIDENCE_ATTEMPTS`` and then pause for human review.
     """
 
     CONFIDENCE_THRESHOLD = 0.5
+    HIGH_CONFIDENCE_THRESHOLD = 0.8
+    MAX_LOW_CONFIDENCE_ATTEMPTS = 3
 
     def __init__(self, selector: TorrentSelector | None = None, llm_tool: BaseTool | None = None):
         if selector is not None:
@@ -76,9 +78,11 @@ class MatchTorrentNode:
             }
 
         confidence = data.get("confidence", 0.0)
+
+        # Below the minimum threshold -> treat as no match and wait for more candidates.
         if confidence < self.CONFIDENCE_THRESHOLD:
             logger.info(
-                "Low confidence ({:.2f}) for episode {}, will retry later",
+                "Confidence below threshold ({:.2f}) for episode {}, will retry later",
                 confidence,
                 state.get("episode_number"),
             )
@@ -87,19 +91,50 @@ class MatchTorrentNode:
                 "status": "no_match",
             }
 
+        # High confidence -> proceed to download immediately.
+        if confidence >= self.HIGH_CONFIDENCE_THRESHOLD:
+            logger.info(
+                "Matched episode {}: hash={}, confidence={:.2f}",
+                state.get("episode_number"),
+                data.get("info_hash"),
+                confidence,
+            )
+            return {
+                "matched_torrent": {
+                    "info_hash": data.get("info_hash"),
+                    "title": data.get("title"),
+                    "link": data.get("link"),
+                    "confidence": confidence,
+                },
+                "status": "matched",
+                "low_confidence_count": 0,
+            }
+
+        # Medium confidence -> accumulate attempts and eventually ask a human.
+        low_confidence_count = state.get("low_confidence_count", 0) + 1
         logger.info(
-            "Matched episode {}: hash={}, confidence={:.2f}",
-            state.get("episode_number"),
-            data.get("info_hash"),
+            "Low confidence ({:.2f}) for episode {} (attempt {}/{})",
             confidence,
+            state.get("episode_number"),
+            low_confidence_count,
+            self.MAX_LOW_CONFIDENCE_ATTEMPTS,
         )
+
+        if low_confidence_count >= self.MAX_LOW_CONFIDENCE_ATTEMPTS:
+            return {
+                "matched_torrent": {
+                    "info_hash": data.get("info_hash"),
+                    "title": data.get("title"),
+                    "link": data.get("link"),
+                    "confidence": confidence,
+                },
+                "status": "human_review",
+                "requires_human": True,
+                "low_confidence_count": low_confidence_count,
+            }
+
         return {
-            "matched_torrent": {
-                "info_hash": data.get("info_hash"),
-                "title": data.get("title"),
-                "link": data.get("link"),
-                "confidence": confidence,
-            },
-            "status": "matched",
-            "low_confidence_count": 0,
+            "matched_torrent": None,
+            "status": "low_confidence",
+            "low_confidence_count": low_confidence_count,
         }
