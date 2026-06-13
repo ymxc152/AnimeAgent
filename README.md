@@ -91,7 +91,17 @@ cp .env.example .env
 | `MEDIA_LIBRARY_PATH` | 整理后的动漫媒体库根目录 |
 | `RSS_DEFAULT_URL` | 默认 RSS 源（如 Nyaa） |
 
-### 4. 启动服务
+### 4. 构建前端（使用 Web 面板时必须）
+
+```bash
+cd frontend
+npm install
+npm run build
+```
+
+构建产物会输出到 `frontend/dist/`，FastAPI 会自动挂载为静态资源。
+
+### 5. 启动服务
 
 ```bash
 # 同时启动 scheduler + Web 面板

@@ -19,7 +19,7 @@
 | Service 层（MetadataResolver、TorrentSelector、ContentFilter、EpisodePlanner、CompletionChecker、HealthCheck、TorrentHealth、DiscoveryService） | ✅ 包含 | ✅ 已实现 | 业务逻辑下沉到 `services/`，可独立测试。 |
 | Episode Agent（Episode Graph） | ✅ 核心 | ✅ 已串联 | `fetch_rss → match_torrent → reflect_match → send_download → poll_download → organize_files → refresh_emby`，含 `schedule_resume` / `handle_error` / `human_review`。 |
 | Scheduler | ✅ 包含 | ✅ 已实现 | 启动预检、定时 tick、每周新番发现。 |
-| Web 面板 | ✅ 原生 HTML/JS | ✅ React/Vite SPA | 功能等效，API 与页面已实现。 |
+| Web 面板 | ✅ 原生 HTML/JS | ✅ React/Vite/Tailwind CSS SPA | 功能等效，API 与页面已实现。 |
 | 人工断点（human_review） | ✅ 包含 | ✅ 已实现 | `reflect_match` 在持续低置信度或 LLM 失败时最终路由到 `human_review`。 |
 | 对话层（Conversational Agent） | ✅ MVP | ❌ 未实现 | `anime_agent/agents/conversational/` 为空；无 NLU / 多轮澄清 / 聊天 API。 |
 | 调度层 LangGraph（Orchestrator Graph） | ✅ 保留 | ❌ 未实现 | 调度以 `services/discovery.py` + `services/scheduler.py` 函数实现，非 LangGraph。 |
@@ -140,7 +140,7 @@
 | 订阅模型 | 一 Subscription 对应一季/一个作品 | 简化 AniList 查询、RSS 匹配、文件整理 |
 | State vs DB | 中间产物持久化到 DB | 便于任务恢复、Web 监控、错误重试 |
 | 人机协同 | MVP 仅保留"种子匹配置信度低"一个断点 | 其他歧义由 LLM 决策 + 日志记录 |
-| Web 面板 | FastAPI 后端 + 原生 HTML/JS 前端 | 支持 NL 聊天 + 表单两种订阅方式 |
+| Web 面板 | FastAPI 后端 + React/Vite/Tailwind CSS 前端 | 支持 NL 聊天 + 表单两种订阅方式 |
 | 运行环境 | Windows 原生运行为主 | 用户 qB/Emby 均在 Windows，Docker 作为可选项 |
 | 新番订阅 | 自动订阅当季新番默认开启 | 调度层 每周发现一次，自动创建 Subscription；用户可在 Web 关闭指定番剧的自动下载 |
 | MVP 周期 | 3 周 | 三个工作流 + NL + Bangumi 集成 + 完整 Episode Graph 需要更多时间 |
@@ -169,7 +169,7 @@
 | 通知 | apprise | 一行代码覆盖多平台 |
 | 下载器 | qbittorrent-api | 官方维护 |
 | Web 框架 | FastAPI | 提供 API + 静态前端 |
-| 前端 | 原生 HTML/CSS/JS | 无构建步骤 |
+| 前端 | React + TypeScript + Tailwind CSS | Vite 构建；生产产物位于 `frontend/dist/` |
 | 日志 | loguru | 结构化日志、自动轮转 |
 | 测试 | pytest + pytest-asyncio + respx/pytest-vcr + coverage | 异步测试、HTTP mock、覆盖率 |
 | 代码质量 | Ruff + MyPy + pre-commit | 格式化、lint、类型检查 |
@@ -292,10 +292,11 @@ ani-agent/
 │   ├── deployment.md               # 部署指南
 │   └── architecture.png            # 架构图（后续生成）
 │
-└── frontend/                   # 原生 HTML/JS 前端
+└── frontend/                   # React + TypeScript + Tailwind CSS 前端
     ├── index.html
-    ├── app.js
-    └── style.css
+    ├── src/
+    ├── package.json
+    └── vite.config.ts
 ```
 
 ---

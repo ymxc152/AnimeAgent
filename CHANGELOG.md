@@ -7,7 +7,7 @@
 - Service 层：元数据解析、内容过滤、种子选择、健康检查、完结检测、调度计划
 - Episode Graph：使用 LangGraph 串联 RSS 拉取、种子匹配、下载、整理、Emby 刷新
 - Scheduler：APScheduler 定时触发 Episode Graph，每周新番发现
-- Web 面板：FastAPI + 原生 HTML/JS，支持订阅管理、发现页、集数状态、工具健康
+- Web 面板：FastAPI + React/Vite/Tailwind CSS，支持订阅管理、发现页、集数状态、工具健康
 - 人工断点：低置信度匹配暂停，Web 端点审批后恢复
 - 工程：Ruff、MyPy、pytest、GitHub Actions CI、部署文档
 
