@@ -1,10 +1,11 @@
 """AnimeGarden resource search tool for anime torrent fallback."""
 
 import re
-from datetime import datetime
+from datetime import UTC, datetime, timedelta
 
 import httpx
 
+from anime_agent.config import Settings, get_settings
 from anime_agent.tools.base import BaseTool, ToolInput, ToolOutput
 
 
@@ -60,8 +61,38 @@ class AnimeGardenTool(BaseTool):
 
     BASE_URL = "https://api.animes.garden"
 
-    def __init__(self, client: httpx.AsyncClient | None = None):
-        self.client = client or httpx.AsyncClient(timeout=30.0)
+    def __init__(
+        self,
+        client: httpx.AsyncClient | None = None,
+        settings: Settings | None = None,
+    ):
+        self.settings = settings or get_settings()
+        self.base_url = self.settings.anime_garden_base_url or self.BASE_URL
+        self.cache_ttl_seconds = self.settings.anime_garden_cache_ttl_seconds
+        self._cache: dict[tuple[str, int], tuple[datetime, ToolOutput]] = {}
+        timeout = self.settings.anime_garden_timeout_seconds
+        self.client = client or httpx.AsyncClient(timeout=float(timeout))
+
+    def _cache_key(self, input_data: AnimeGardenToolInput) -> tuple[str, int]:
+        return (input_data.search, input_data.page)
+
+    def _get_cached(self, input_data: AnimeGardenToolInput) -> ToolOutput | None:
+        if self.cache_ttl_seconds <= 0:
+            return None
+        key = self._cache_key(input_data)
+        cached = self._cache.get(key)
+        if cached is None:
+            return None
+        cached_at, output = cached
+        if datetime.now(UTC) - cached_at > timedelta(seconds=self.cache_ttl_seconds):
+            del self._cache[key]
+            return None
+        return output
+
+    def _set_cached(self, input_data: AnimeGardenToolInput, output: ToolOutput) -> None:
+        if self.cache_ttl_seconds <= 0:
+            return
+        self._cache[self._cache_key(input_data)] = (datetime.now(UTC), output)
 
     async def invoke(self, input_data: ToolInput) -> ToolOutput:
         """Search for anime resources via Anime Garden API."""
@@ -71,8 +102,12 @@ class AnimeGardenTool(BaseTool):
                 error="Input must be AnimeGardenToolInput",
             )
 
+        cached = self._get_cached(input_data)
+        if cached is not None:
+            return cached
+
         try:
-            url = f"{self.BASE_URL}/resources"
+            url = f"{self.base_url}/resources"
             params: dict[str, str | int] = {
                 "search": input_data.search,
                 "page": input_data.page,
@@ -114,10 +149,12 @@ class AnimeGardenTool(BaseTool):
                 }
                 candidates.append(candidate)
 
-            return ToolOutput(
+            output = ToolOutput(
                 success=True,
                 data={"candidates": candidates, "total": len(candidates)},
             )
+            self._set_cached(input_data, output)
+            return output
 
         except httpx.HTTPStatusError as exc:
             return ToolOutput(
@@ -138,7 +175,7 @@ class AnimeGardenTool(BaseTool):
     async def healthcheck(self) -> ToolOutput:
         """Check if AnimeGarden API is accessible."""
         try:
-            response = await self.client.get(f"{self.BASE_URL}/resources", params={"search": "test", "page": 1})
+            response = await self.client.get(f"{self.base_url}/resources", params={"search": "test", "page": 1})
             response.raise_for_status()
             return ToolOutput(success=True)
         except Exception as exc:

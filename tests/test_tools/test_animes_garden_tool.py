@@ -232,3 +232,41 @@ class TestAnimeGardenTool:
 
             result = await tool.healthcheck()
             assert result.success is False
+
+    async def test_invoke_uses_cache_on_repeated_search(self, tool, mock_response):
+        """Should cache results and avoid a second HTTP request."""
+        with patch.object(tool.client, "get") as mock_get:
+            mock_get.return_value = MagicMock(
+                status_code=200,
+                json=lambda: mock_response,
+                raise_for_status=lambda: None,
+            )
+
+            input_data = AnimeGardenToolInput(search="Frieren")
+            first = await tool.invoke(input_data)
+            second = await tool.invoke(input_data)
+
+            assert first.success is True
+            assert second.success is True
+            assert first.data["candidates"] == second.data["candidates"]
+            mock_get.assert_awaited_once()
+
+    async def test_invoke_respects_zero_cache_ttl(self, mock_response):
+        """Should not cache when cache TTL is set to zero."""
+        from anime_agent.config import Settings
+
+        settings = Settings(anime_garden_cache_ttl_seconds=0)
+        tool = AnimeGardenTool(settings=settings)
+
+        with patch.object(tool.client, "get") as mock_get:
+            mock_get.return_value = MagicMock(
+                status_code=200,
+                json=lambda: mock_response,
+                raise_for_status=lambda: None,
+            )
+
+            input_data = AnimeGardenToolInput(search="Frieren")
+            await tool.invoke(input_data)
+            await tool.invoke(input_data)
+
+            assert mock_get.await_count == 2

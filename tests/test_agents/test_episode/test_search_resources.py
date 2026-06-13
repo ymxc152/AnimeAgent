@@ -116,3 +116,39 @@ class TestSearchResourcesNode:
 
         assert result["status"] == "failed"
         assert len(result["torrent_candidates"]) == 1
+
+    async def test_search_disabled_fallback_returns_schedule_resume(self):
+        """Should skip searching when resource fallback is disabled."""
+        from anime_agent.config import Settings
+
+        mock_tool = AsyncMock()
+        node = SearchResourcesNode(
+            anime_garden_tool=mock_tool,
+            settings=Settings(resource_fallback_enabled=False),
+        )
+        result = await node(_state())
+
+        assert result["status"] == "schedule_resume"
+        assert result["resource_searched"] is False
+        mock_tool.invoke.assert_not_awaited()
+
+    async def test_search_fetches_multiple_pages(self):
+        """Should fetch multiple pages when configured."""
+        from anime_agent.config import Settings
+
+        mock_tool = AsyncMock()
+        mock_tool.invoke.side_effect = [
+            ToolOutput(success=True, data={"candidates": [{"info_hash": "p1", "title": "page1"}]}),
+            ToolOutput(success=True, data={"candidates": [{"info_hash": "p2", "title": "page2"}]}),
+        ]
+
+        node = SearchResourcesNode(
+            anime_garden_tool=mock_tool,
+            settings=Settings(resource_search_max_pages=2),
+        )
+        result = await node(_state())
+
+        assert result["status"] == "searched"
+        assert len(result["torrent_candidates"]) == 2
+        assert {c["info_hash"] for c in result["torrent_candidates"]} == {"p1", "p2"}
+        assert mock_tool.invoke.await_count == 2

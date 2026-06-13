@@ -66,6 +66,13 @@ class Settings(BaseSettings):
     # Discovery defaults
     discovery_default_total_episodes: int = 12
 
+    # AnimeGarden / resource fallback
+    anime_garden_base_url: str = "https://api.animes.garden"
+    anime_garden_timeout_seconds: int = 30
+    anime_garden_cache_ttl_seconds: int = 3600
+    resource_fallback_enabled: bool = True
+    resource_search_max_pages: int = 1
+
     # Notifications
     apprise_urls: str = ""
 
