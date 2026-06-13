@@ -26,6 +26,11 @@ class Settings(BaseSettings):
     qb_username: str | None = None
     qb_password: str | None = None
     qb_save_path: str = "C:\\Downloads\\Anime"
+    # Path mapping for remote qBittorrent. If qB reports files under a path
+    # that is mounted differently on the local machine, translate it.
+    # Example: remote F:\下载 -> local Z:\下载
+    qb_path_map_remote: str | None = None
+    qb_path_map_local: str | None = None
 
     # Emby
     emby_host: str = "http://localhost:8096"

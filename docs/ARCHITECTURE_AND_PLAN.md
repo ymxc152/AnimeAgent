@@ -15,21 +15,21 @@
 | 组件 | 规划状态 | 实际状态 | 备注 |
 |------|----------|----------|------|
 | Tool 层（Bangumi、AniList、TMDB、RSS、qB、Emby、Notify、FS、LLM） | ✅ 包含 | ✅ 已实现 | 10 个工具均存在，单元测试覆盖较好。 |
-| AnimeGardenTool（老番/全集 fallback） | 后续设计 | ✅ 已实现 | 见 `docs/OLD_ANIME_DOWNLOAD_DESIGN.md`；但缺少缓存与配置项。 |
+| AnimeGardenTool（老番/全集 fallback） | 后续设计 | ✅ 已实现 | 见 `docs/OLD_ANIME_DOWNLOAD_DESIGN.md`；已补齐配置项并增加 1 小时内存缓存。 |
 | Service 层（MetadataResolver、TorrentSelector、ContentFilter、EpisodePlanner、CompletionChecker、HealthCheck、TorrentHealth、DiscoveryService） | ✅ 包含 | ✅ 已实现 | 业务逻辑下沉到 `services/`，可独立测试。 |
-| Episode Agent（Episode Graph） | ✅ 核心 | ✅ 已串联 | `fetch_rss → match_torrent → reflect_match → send_download → poll_download → organize_files → refresh_emby`，含 `schedule_resume` / `handle_error` / `human_review`。 |
+| Episode Agent（Episode Graph） | ✅ 核心 | ✅ 已串联 | `fetch_rss → match_torrent → reflect_match → send_download → poll_download → process_metadata → organize_files → refresh_emby → notify_user`，含 `schedule_resume` / `handle_error` / `human_review`。 |
 | Scheduler | ✅ 包含 | ✅ 已实现 | 启动预检、定时 tick、每周新番发现。 |
 | Web 面板 | ✅ 原生 HTML/JS | ✅ React/Vite/Tailwind CSS SPA | 功能等效，API 与页面已实现。 |
 | 人工断点（human_review） | ✅ 包含 | ✅ 已实现 | `reflect_match` 在持续低置信度或 LLM 失败时最终路由到 `human_review`。 |
 | 对话层（Conversational Agent） | ✅ MVP | ❌ 未实现 | `anime_agent/agents/conversational/` 为空；无 NLU / 多轮澄清 / 聊天 API。 |
 | 调度层 LangGraph（Orchestrator Graph） | ✅ 保留 | ❌ 未实现 | 调度以 `services/discovery.py` + `services/scheduler.py` 函数实现，非 LangGraph。 |
-| `process_metadata` 节点 | ✅ 合并节点 | ❌ 未实现 | 内容分类与 TMDB 验证未落地， organize_files 默认季数为 1。 |
-| `notify_user` 节点 | ✅ 包含 | ❌ 未实现 | 仅工具存在，Graph 未调用。 |
+| `process_metadata` 节点 | ✅ 合并节点 | ✅ 已实现 | 最小实现：根据订阅格式输出 `content_type`，后续可接入 TMDB 验证。 |
+| `notify_user` 节点 | ✅ 包含 | ✅ 已实现 | 在 `refresh_emby` 成功或 `handle_error` 后调用 `NotifyTool` 发送通知。 |
 | `metrics.py` / `utils/folder.py` | ✅ 预留 | ❌ 未实现 | 计数器、目录规范化均未落地。 |
 
 ### 测试现状
 
-- **pytest**：`271 passed, 1 skipped, 14 deselected`（含新增强化 RSS、reflect_match、torrent_health 用例；`test_web/test_frontend.py` 在 `frontend/dist` 不存在时跳过）。
+- **pytest**：`296 passed, 1 skipped, 14 deselected`（含新增强化 RSS、reflect_match、torrent_health 用例；`test_web/test_frontend.py` 在 `frontend/dist` 不存在时跳过）。
 - **Ruff**：通过，无 lint 错误。
 - **MyPy**：通过，无类型错误。
 - CI 当前为绿色。
@@ -109,17 +109,17 @@
 |--------|----------|
 | 三层 LangGraph（对话/调度/Episode） | 仅 Episode Graph 实现；对话层、调度层 LangGraph 未实现。 |
 | Bangumi 优先 | `MetadataResolver.get_seasonal` 已实现 Bangumi 优先、AniList fallback；DiscoveryService 与 Web 发现端点均走该逻辑。 |
-| 按播出周几智能调度 | 未实现播出时间门控；每 tick 扫描所有活跃 Episode。 |
+| 按播出周几智能调度 | 已实现播出时间门控；优先使用 `episode.aired_at`，否则按订阅的 `expected_airing_weekday/time` 估算。 |
 | 人工断点 | `match_torrent` 已实现低置信度计数，`reflect_match` 节点在多次低置信度后路由到 `human_review`；状态与 API 可用。 |
-| `process_metadata` 节点 | 未实现； organize_files 直接整理。 |
-| 通知用户节点 | 未实现。 |
+| `process_metadata` 节点 | 已实现；位于 `poll_download` 与 `organize_files` 之间，输出 `content_type`。 |
+| 通知用户节点 | 已实现；`refresh_emby` 成功与 `handle_error` 后触发 `notify_user`。 |
 | 对话查询统计 | 未实现。 |
 
 ### 后续建议优先级
 
 - **P0**：~~修复 `match_torrent` 低置信度逻辑；处理前端测试失败；清理 lint/type 错误~~ ✅ **已完成**。
 - **P1**：统一 `torrent_hash` / `torrent_info_hash`；`OrganizeFilesNode` 使用 Subscription 真实季数；`PollDownloadNode` 实现自适应轮询间隔。
-- **P2**：~~Discovery 改为 Bangumi 优先~~ ✅ **已完成**；Scheduler 增加播出时间门控与错峰调度；实现 `process_metadata` 与 `notify_user` 节点。
+- **P2**：~~Discovery 改为 Bangumi 优先~~ ✅ **已完成**；~~Scheduler 增加播出时间门控~~ ✅ **已完成**；实现 `process_metadata` 与 `notify_user` 节点 ✅ **已完成**。
 - **P3**：实现最小对话层；按 OLD 设计补齐 Anime Garden 缓存、配置项与 StatusQueryService。
 
 ---

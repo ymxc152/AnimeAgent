@@ -32,6 +32,10 @@ class EpisodeAgentState(TypedDict):
     download_files: list[str]
     download_progress: float
     classification: dict[str, Any] | None
+    content_type: str
+    tmdb_id: int | None
+    confidence: float
+    verified: bool
     organized_path: str | None
     organized_files: list[str]
     emby_refreshed: bool

@@ -1,7 +1,7 @@
 """Tests for poll_download node."""
 
 from datetime import UTC, datetime, timedelta
-from unittest.mock import AsyncMock
+from unittest.mock import AsyncMock, patch
 
 from anime_agent.agents.episode.nodes.poll_download import PollDownloadNode
 from anime_agent.tools.base import ToolOutput
@@ -182,6 +182,37 @@ async def test_poll_download_uses_shorter_interval_for_metadata():
     resume_after = datetime.fromisoformat(result["resume_after"])
     expected_max = datetime.now(UTC) + timedelta(minutes=3)
     assert resume_after < expected_max
+
+
+async def test_poll_download_maps_remote_path_to_local_share():
+    """poll_download should translate qBittorrent's remote path to local mounted path."""
+    qb_tool = AsyncMock()
+    qb_tool.invoke.return_value = ToolOutput(
+        success=True,
+        data={
+            "status": {
+                "progress": 1.0,
+                "state": "uploading",
+                "content_path": "F:\\下载\\Anime - 01.mkv",
+                "name": "Anime - 01.mkv",
+                "added_at": datetime.now(UTC),
+                "last_speed_at": datetime.now(UTC),
+            }
+        },
+    )
+
+    with patch(
+        "anime_agent.agents.episode.nodes.poll_download.settings.qb_path_map_remote",
+        "F:\\下载",
+    ), patch(
+        "anime_agent.agents.episode.nodes.poll_download.settings.qb_path_map_local",
+        "Z:\\下载",
+    ):
+        node = PollDownloadNode(qb_tool=qb_tool)
+        result = await node(_state())
+
+    assert result["status"] == "downloaded"
+    assert result["download_files"] == ["Z:\\下载\\Anime - 01.mkv"]
 
 
 async def test_poll_download_uses_longer_interval_for_healthy():

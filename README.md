@@ -196,10 +196,10 @@ anime-agent/
 - [x] APScheduler 定时调度
 - [x] FastAPI + React Web 面板
 - [x] 人工审批断点（UI 已就绪，`match_torrent` 触发逻辑待修复）
-- [x] Anime Garden 老番/全集 fallback（基础实现，缓存与配置项待补齐）
+- [x] Anime Garden 老番/全集 fallback（含缓存、配置项与资源回退开关）
 - [ ] 对话层（自然语言订阅、意图解析、多轮澄清）
-- [ ] `process_metadata` 节点（内容分类 + TMDB 验证）
-- [ ] `notify_user` 节点与真实通知推送
+- [x] `process_metadata` 节点（内容分类，TMDB 验证预留）
+- [x] `notify_user` 节点与真实通知推送（通过 Apprise）
 - [ ] 更多下载器支持（Transmission、Aria2 等）
 - [ ] Docker 部署模板
 - [ ] 更丰富的通知渠道

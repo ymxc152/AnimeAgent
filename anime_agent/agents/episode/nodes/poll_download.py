@@ -63,6 +63,7 @@ class PollDownloadNode:
 
         if recommend == "process":
             content_path = status.get("content_path") or status.get("save_path")
+            content_path = self._map_remote_path(content_path)
             download_files = [content_path] if content_path else []
             logger.info(
                 "Download complete for episode {}: files={}",
@@ -119,6 +120,25 @@ class PollDownloadNode:
             return self.HEALTHY_INTERVAL_SECONDS
         # Slow / unknown: use configured default.
         return settings.check_interval_seconds or self.DEFAULT_INTERVAL_SECONDS
+
+    def _map_remote_path(self, path: str | None) -> str | None:
+        """Translate qBittorrent's remote path to a local mounted path.
+
+        Useful when qBittorrent runs on a different machine and its download
+        directory is exposed via a network share mounted locally.
+        """
+        if not path:
+            return path
+        remote_prefix = settings.qb_path_map_remote
+        local_prefix = settings.qb_path_map_local
+        if not remote_prefix or not local_prefix:
+            return path
+        # Normalize separators for comparison.
+        norm_path = path.replace("/", "\\")
+        norm_remote = remote_prefix.replace("/", "\\")
+        if norm_path.startswith(norm_remote):
+            return local_prefix + norm_path[len(norm_remote):]
+        return path
 
     async def _delete_torrent(self, torrent_hash: str) -> None:
         """Remove a failed torrent from qBittorrent to avoid clutter."""

@@ -9,8 +9,10 @@ from anime_agent.agents.episode.nodes.fetch_rss import FetchRSSNode
 from anime_agent.agents.episode.nodes.handle_error import HandleErrorNode
 from anime_agent.agents.episode.nodes.human_review import HumanReviewNode
 from anime_agent.agents.episode.nodes.match_torrent import MatchTorrentNode
+from anime_agent.agents.episode.nodes.notify_user import NotifyUserNode
 from anime_agent.agents.episode.nodes.organize_files import OrganizeFilesNode
 from anime_agent.agents.episode.nodes.poll_download import PollDownloadNode
+from anime_agent.agents.episode.nodes.process_metadata import ProcessMetadataNode
 from anime_agent.agents.episode.nodes.reflect_match import ReflectMatchNode
 from anime_agent.agents.episode.nodes.refresh_emby import RefreshEmbyNode
 from anime_agent.agents.episode.nodes.schedule_resume import ScheduleResumeNode
@@ -27,7 +29,8 @@ def _status_router(state: EpisodeAgentState) -> str:
         "fetching": "fetch_rss",
         "matched": "send_download",
         "downloading": "poll_download",
-        "downloaded": "organize_files",
+        "downloaded": "process_metadata",
+        "metadata_processed": "organize_files",
         "organized": "refresh_emby",
         "organized_with_warnings": "refresh_emby",
         "human_review": "human_review",
@@ -95,9 +98,16 @@ def _after_poll_download(state: EpisodeAgentState) -> str:
     if status == "downloading":
         return "schedule_resume"
     if status == "downloaded":
-        return "organize_files"
+        return "process_metadata"
     if status == "retry_match":
         return "match_torrent"
+    return "handle_error"
+
+
+def _after_process_metadata(state: EpisodeAgentState) -> str:
+    status = state.get("status")
+    if status == "metadata_processed":
+        return "organize_files"
     return "handle_error"
 
 
@@ -111,8 +121,12 @@ def _after_organize_files(state: EpisodeAgentState) -> str:
 def _after_refresh_emby(state: EpisodeAgentState) -> str:
     status = state.get("status")
     if status == "completed":
-        return END
+        return "notify_user"
     return "handle_error"
+
+
+def _after_handle_error(state: EpisodeAgentState) -> str:
+    return "notify_user"
 
 
 def _after_human_review(state: EpisodeAgentState) -> str:
@@ -140,12 +154,14 @@ def build_episode_graph(**node_overrides: Any) -> CompiledStateGraph:
     builder.add_node("search_resources", node_overrides.get("search_resources", SearchResourcesNode()))
     builder.add_node("send_download", node_overrides.get("send_download", SendDownloadNode()))
     builder.add_node("poll_download", node_overrides.get("poll_download", PollDownloadNode()))
+    builder.add_node("process_metadata", node_overrides.get("process_metadata", ProcessMetadataNode()))
     builder.add_node("organize_files", node_overrides.get("organize_files", OrganizeFilesNode()))
     builder.add_node("refresh_emby", node_overrides.get("refresh_emby", RefreshEmbyNode()))
     builder.add_node("human_review", node_overrides.get("human_review", HumanReviewNode()))
     builder.add_node("reflect_match", node_overrides.get("reflect_match", ReflectMatchNode()))
     builder.add_node("schedule_resume", node_overrides.get("schedule_resume", ScheduleResumeNode()))
     builder.add_node("handle_error", node_overrides.get("handle_error", HandleErrorNode()))
+    builder.add_node("notify_user", node_overrides.get("notify_user", NotifyUserNode()))
 
     builder.add_conditional_edges(START, _status_router)
 
@@ -155,10 +171,12 @@ def build_episode_graph(**node_overrides: Any) -> CompiledStateGraph:
     builder.add_conditional_edges("search_resources", _after_search_resources)
     builder.add_conditional_edges("send_download", _after_send_download)
     builder.add_conditional_edges("poll_download", _after_poll_download)
+    builder.add_conditional_edges("process_metadata", _after_process_metadata)
     builder.add_conditional_edges("organize_files", _after_organize_files)
     builder.add_conditional_edges("refresh_emby", _after_refresh_emby)
+    builder.add_conditional_edges("handle_error", _after_handle_error)
     builder.add_conditional_edges("human_review", _after_human_review)
     builder.add_edge("schedule_resume", END)
-    builder.add_edge("handle_error", END)
+    builder.add_edge("notify_user", END)
 
     return builder.compile()

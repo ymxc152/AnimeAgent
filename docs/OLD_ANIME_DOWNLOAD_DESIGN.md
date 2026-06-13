@@ -2,7 +2,7 @@
 
 > 本文档描述：当用户请求的番剧无法通过现有 RSS 源找到种子时，如何通过 `api.animes.garden/resources` 进行兜底搜索，并支持用户通过对话查询下载状态、季数集数等统计信息。
 >
-> 状态：**部分实现**（2026-06-13 更新）。`AnimeGardenTool`、统一候选格式、`search_resources` 节点已落地；缓存、配置项、`StatusQueryService` 尚未实现。详见下方「实现状态」章节。
+> 状态：**部分实现**（2026-06-13 更新）。`AnimeGardenTool`、统一候选格式、`search_resources` 节点、缓存、配置项已落地；`StatusQueryService` 尚未实现。详见下方「实现状态」章节。
 
 ---
 
@@ -23,10 +23,10 @@
 
 | 组件 | 规划位置 | 差距说明 |
 |------|----------|----------|
-| 关键词缓存 | `AnimeGardenTool` | §4.2 要求同一关键词 1 小时内缓存，当前未实现。 |
-| 配置项 | `config.py` / `.env.example` | §10 中的 `ANIME_GARDEN_ENABLED`、`ANIME_GARDEN_BASE_URL`、`ANIME_GARDEN_CACHE_TTL_SECONDS`、`RESOURCE_FALLBACK_AFTER_RSS_EMPTY`、`RESOURCE_FALLBACK_OLD_ANIME_DAYS`、`RESOURCE_SEARCH_MAX_PAGES` 均未添加。 |
+| 关键词缓存 | `AnimeGardenTool` | ✅ 已实现；默认 1 小时 TTL，可通过 `ANIME_GARDEN_CACHE_TTL_SECONDS` 调整。 |
+| 配置项 | `config.py` / `.env.example` | 已添加 `ANIME_GARDEN_BASE_URL`、`ANIME_GARDEN_TIMEOUT_SECONDS`、`ANIME_GARDEN_CACHE_TTL_SECONDS`、`RESOURCE_FALLBACK_ENABLED`、`RESOURCE_SEARCH_MAX_PAGES`。 |
 | 老番自动判定 | `MetadataResolver` / Subscription 创建逻辑 | §5.1 条件 4 与 §6.2 要求根据完结状态/播出时间自动设置 `fallback_to_resource_search`，当前未实现。 |
-| 分页拉取 | `AnimeGardenTool` | §4.2 第 4 点预留 `page` 参数，当前仅拉取第一页。 |
+| 分页拉取 | `AnimeGardenTool` / `search_resources` | 已支持；`RESOURCE_SEARCH_MAX_PAGES` 控制最大页数，默认 1。 |
 | `poll_download` 失败后再匹配 | `anime_agent/agents/episode/nodes/poll_download.py` | §5.2 流程要求失败后回到 `match_torrent`（含资源候选），当前实现进入 `schedule_resume`，未自动重匹配。 |
 | `mark_failed_hash` 节点 | §5.2 | 未作为独立节点；失败 hash 由 `send_download` / `poll_download` 自行维护。 |
 | `StatusQueryService` | §7 | 未实现；对话层本身也未实现。 |
@@ -39,8 +39,8 @@
    - 位置：`anime_agent/tools/animes_garden_tool.py:66`
    - 当前签名与 `BaseTool.invoke(self, input_data: ToolInput)` 一致；内部通过 `isinstance` 校验具体输入类型，MyPy 通过。
 
-2. **`AnimeGardenTool` 无缓存**
-   - 同一关键词高频调用会增加 API 压力和响应延迟。
+2. ~~**`AnimeGardenTool` 无缓存**~~ ✅ **已修复**
+   - 同一关键词 1 小时内缓存，避免重复调用。
 
 3. **候选去重依赖调用方**
    - 规划 §3 提到按 `info_hash` 去重；当前 `search_resources` 与 `fetch_rss` 各自返回候选，去重逻辑在 `runner.py` 中合并，可能不够完善。
@@ -56,7 +56,7 @@
 - **Phase 2**：🔄 部分完成（`search_resources` 节点已接入，但 `poll_download` 失败重匹配、候选池语义扩展未完整落地）。
 - **Phase 3**：❌ 未开始（老番自动判定）。
 - **Phase 4**：❌ 未开始（`StatusQueryService`、对话统计）。
-- **Phase 5**：❌ 未开始（配置项与文档同步，`.env.example` 与 `ARCHITECTURE_AND_PLAN.md` 需更新）。
+- **Phase 5**：✅ 已完成（配置项与文档同步，`.env.example` 与 `ARCHITECTURE_AND_PLAN.md` 已更新）。
 
 ---
 
