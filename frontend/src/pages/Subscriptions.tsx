@@ -9,7 +9,7 @@ import {
 import type { Subscription, SubscriptionCreateRequest } from '../types'
 import { useI18n } from '../i18n/useI18n'
 import { usePolling } from '../hooks/usePolling'
-import { Card, Button, Input, Switch, Badge, Loading, EmptyState } from '../components/ui'
+import { Card, Button, Input, Switch, Badge, Loading, EmptyState, Modal } from '../components/ui'
 import { Plus, Trash2, ListVideo, RefreshCw } from 'lucide-react'
 
 const POLL_INTERVAL = 5000
@@ -20,20 +20,25 @@ const SUBSCRIPTION_STATUS_VARIANT: Record<string, 'primary' | 'success' | 'muted
   dropped: 'muted',
 }
 
+const EMPTY_FORM: SubscriptionCreateRequest = {
+  title_romaji: '',
+  title_chinese: '',
+  title_native: '',
+  total_episodes: 12,
+  auto_download_enabled: true,
+  bangumi_id: null,
+  anilist_id: null,
+}
+
 export function Subscriptions() {
   const { t } = useI18n()
   const [subscriptions, setSubscriptions] = useState<Subscription[]>([])
   const [loading, setLoading] = useState(true)
   const [refreshing, setRefreshing] = useState<Set<number>>(new Set())
   const [error, setError] = useState<string | null>(null)
-  const [form, setForm] = useState<SubscriptionCreateRequest>({
-    title_romaji: '',
-    title_chinese: '',
-    total_episodes: 12,
-    auto_download_enabled: true,
-  })
+  const [showModal, setShowModal] = useState(false)
+  const [form, setForm] = useState<SubscriptionCreateRequest>(EMPTY_FORM)
 
-   
   const load = useCallback(async () => {
     setLoading(true)
     try {
@@ -47,16 +52,16 @@ export function Subscriptions() {
     }
   }, [])
 
-  // eslint-disable-next-line react-hooks/set-state-in-effect -- initial data load
+  // eslint-disable-next-line react-hooks/set-state-in-effect
   useEffect(() => { void load() }, [load])
-
   usePolling(load, POLL_INTERVAL)
 
   async function handleSubmit(e: React.FormEvent) {
     e.preventDefault()
     try {
       await createSubscription(form)
-      setForm({ title_romaji: '', title_chinese: '', total_episodes: 12, auto_download_enabled: true })
+      setForm(EMPTY_FORM)
+      setShowModal(false)
       await load()
     } catch (err) {
       setError(err instanceof Error ? err.message : t.subscriptions.createError)
@@ -103,10 +108,14 @@ export function Subscriptions() {
   return (
     <div className="space-y-8">
       {/* Page header */}
-      <div>
+      <div className="flex items-center justify-between">
         <h1 className="text-2xl font-bold tracking-tight text-slate-900 dark:text-white">
           {t.subscriptions.title}
         </h1>
+        <Button variant="primary" onClick={() => setShowModal(true)}>
+          <Plus className="h-4 w-4" />
+          {t.subscriptions.addSubscription}
+        </Button>
       </div>
 
       {/* Error banner */}
@@ -115,39 +124,6 @@ export function Subscriptions() {
           <p className="text-sm text-rose-600 dark:text-rose-400">{error}</p>
         </Card>
       )}
-
-      {/* Add form */}
-      <Card>
-        <h2 className="mb-4 text-base font-semibold text-slate-900 dark:text-white">
-          {t.subscriptions.addTitle}
-        </h2>
-        <form onSubmit={handleSubmit} className="grid grid-cols-1 gap-4 sm:grid-cols-2 lg:grid-cols-4">
-          <Input
-            placeholder={t.subscriptions.form.romajiTitle}
-            value={form.title_romaji}
-            onChange={(e) => setForm({ ...form, title_romaji: e.target.value })}
-            required
-          />
-          <Input
-            placeholder={t.subscriptions.form.chineseTitle}
-            value={form.title_chinese || ''}
-            onChange={(e) => setForm({ ...form, title_chinese: e.target.value })}
-          />
-          <Input
-            type="number"
-            placeholder={t.subscriptions.form.totalEpisodes}
-            value={form.total_episodes ?? ''}
-            onChange={(e) => setForm({ ...form, total_episodes: Number(e.target.value) })}
-            required
-          />
-          <div className="flex items-end sm:col-span-2 lg:col-span-4">
-            <Button type="submit" variant="primary">
-              <Plus className="h-4 w-4" />
-              {t.common.add}
-            </Button>
-          </div>
-        </form>
-      </Card>
 
       {/* Subscription list */}
       {subscriptions.length === 0 ? (
@@ -240,6 +216,64 @@ export function Subscriptions() {
             )
           })}
         </div>
+      )}
+
+      {/* Add subscription modal */}
+      {showModal && (
+        <Modal
+          title={t.subscriptions.addSubscription}
+          onClose={() => setShowModal(false)}
+          footer={
+            <>
+              <Button variant="secondary" onClick={() => setShowModal(false)}>
+                {t.common.cancel}
+              </Button>
+              <Button variant="primary" onClick={handleSubmit}>
+                {t.common.add}
+              </Button>
+            </>
+          }
+        >
+          <form onSubmit={handleSubmit} className="grid grid-cols-1 gap-4">
+            <Input
+              placeholder={t.subscriptions.form.romajiTitle}
+              value={form.title_romaji}
+              onChange={(e) => setForm({ ...form, title_romaji: e.target.value })}
+              required
+            />
+            <Input
+              placeholder={t.subscriptions.form.chineseTitle}
+              value={form.title_chinese || ''}
+              onChange={(e) => setForm({ ...form, title_chinese: e.target.value })}
+            />
+            <Input
+              placeholder={t.subscriptions.form.nativeTitle}
+              value={form.title_native || ''}
+              onChange={(e) => setForm({ ...form, title_native: e.target.value })}
+            />
+            <div className="grid grid-cols-2 gap-4">
+              <Input
+                type="number"
+                placeholder="Bangumi ID"
+                value={form.bangumi_id ?? ''}
+                onChange={(e) => setForm({ ...form, bangumi_id: e.target.value ? Number(e.target.value) : null })}
+              />
+              <Input
+                type="number"
+                placeholder="AniList ID"
+                value={form.anilist_id ?? ''}
+                onChange={(e) => setForm({ ...form, anilist_id: e.target.value ? Number(e.target.value) : null })}
+              />
+            </div>
+            <Input
+              type="number"
+              placeholder={t.subscriptions.form.totalEpisodes}
+              value={form.total_episodes ?? ''}
+              onChange={(e) => setForm({ ...form, total_episodes: Number(e.target.value) })}
+              required
+            />
+          </form>
+        </Modal>
       )}
     </div>
   )

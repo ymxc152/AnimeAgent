@@ -1,4 +1,4 @@
-import { Link, NavLink, Outlet, useLocation } from 'react-router-dom'
+import { Link, NavLink, Outlet } from 'react-router-dom'
 import {
   LayoutDashboard,
   ListVideo,
@@ -22,7 +22,6 @@ const navItems = [
 
 export function Layout() {
   const { t } = useI18n()
-  const location = useLocation()
 
   return (
     <div className="flex min-h-screen flex-col">
@@ -45,27 +44,21 @@ export function Layout() {
           <nav className="hidden items-center gap-1 md:flex">
             {navItems.map((item) => {
               const Icon = item.icon
-              const isActive =
-                item.path === '/' ? location.pathname === '/' : location.pathname.startsWith(item.path)
               return (
                 <NavLink
                   key={item.path}
                   to={item.path}
                   end={item.path === '/'}
-                  className={`
-                    group relative flex items-center gap-2 rounded-xl px-3.5 py-2 text-sm font-medium transition-all duration-200
-                    ${
+                  className={({ isActive }) =>
+                    `group relative flex items-center gap-2 rounded-xl px-3.5 py-2 text-sm font-medium transition-all duration-200 ${
                       isActive
-                        ? 'text-indigo-600 dark:text-indigo-300'
+                        ? 'bg-indigo-50 text-indigo-600 dark:bg-indigo-500/10 dark:text-indigo-300'
                         : 'text-slate-600 hover:bg-slate-100 hover:text-slate-900 dark:text-slate-400 dark:hover:bg-slate-800 dark:hover:text-white'
-                    }
-                  `}
+                    }`
+                  }
                 >
                   <Icon className="h-4 w-4" />
                   <span>{t.nav[item.key]}</span>
-                  {isActive && (
-                    <span className="absolute inset-x-2 bottom-0 h-0.5 rounded-full bg-gradient-to-r from-violet-600 to-indigo-600" />
-                  )}
                 </NavLink>
               )
             })}
@@ -81,21 +74,18 @@ export function Layout() {
         <div className="mx-auto flex max-w-7xl items-center gap-1 overflow-x-auto px-4 py-2 sm:px-6 lg:px-8">
           {navItems.map((item) => {
             const Icon = item.icon
-            const isActive =
-              item.path === '/' ? location.pathname === '/' : location.pathname.startsWith(item.path)
             return (
               <NavLink
                 key={item.path}
                 to={item.path}
                 end={item.path === '/'}
-                className={`
-                  flex shrink-0 items-center gap-1.5 rounded-lg px-3 py-2 text-xs font-medium transition-colors
-                  ${
+                className={({ isActive }) =>
+                  `flex shrink-0 items-center gap-1.5 rounded-lg px-3 py-2 text-xs font-medium transition-colors ${
                     isActive
                       ? 'bg-indigo-50 text-indigo-600 dark:bg-indigo-500/10 dark:text-indigo-300'
                       : 'text-slate-600 hover:bg-slate-100 dark:text-slate-400 dark:hover:bg-slate-800'
-                  }
-                `}
+                  }`
+                }
               >
                 <Icon className="h-3.5 w-3.5" />
                 <span>{t.nav[item.key]}</span>

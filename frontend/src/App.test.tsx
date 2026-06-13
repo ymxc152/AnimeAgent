@@ -1,6 +1,8 @@
 import { render, screen } from '@testing-library/react'
 import { describe, expect, it, vi } from 'vitest'
 import App from './App'
+import { I18nProvider } from './i18n/I18nContext'
+import { ToastProvider } from './context/ToastProvider'
 
 vi.mock('./api/client', () => ({
   getStats: vi.fn().mockResolvedValue({
@@ -17,18 +19,26 @@ vi.mock('./api/client', () => ({
   listLogs: vi.fn().mockResolvedValue([]),
 }))
 
+function renderWithI18n(ui: React.ReactNode) {
+  return render(
+    <I18nProvider>
+      <ToastProvider>{ui}</ToastProvider>
+    </I18nProvider>
+  )
+}
+
 describe('App routing', () => {
   it('renders dashboard by default', async () => {
-    render(<App />)
-    expect(await screen.findByText('Dashboard')).toBeInTheDocument()
+    renderWithI18n(<App />)
+    expect(await screen.findByRole('heading', { name: 'Dashboard' })).toBeInTheDocument()
   })
 
-  it('renders navigation links', () => {
-    render(<App />)
-    expect(screen.getByText('Subscriptions')).toBeInTheDocument()
-    expect(screen.getByText('Episodes')).toBeInTheDocument()
-    expect(screen.getByText('Discovery')).toBeInTheDocument()
-    expect(screen.getByText('RSS Sources')).toBeInTheDocument()
-    expect(screen.getByText('Logs')).toBeInTheDocument()
+  it('renders navigation links', async () => {
+    renderWithI18n(<App />)
+    expect(await screen.findAllByText('Subscriptions')).toHaveLength(2)
+    expect(await screen.findAllByText('Episodes')).toHaveLength(2)
+    expect(await screen.findAllByText('Discovery')).toHaveLength(2)
+    expect(await screen.findAllByText('RSS Sources')).toHaveLength(2)
+    expect(await screen.findAllByText('Logs')).toHaveLength(2)
   })
 })

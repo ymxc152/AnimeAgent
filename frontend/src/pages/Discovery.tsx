@@ -1,9 +1,26 @@
-import { useEffect, useState } from 'react'
-import { discoverySeason, discoverySubscribe, listSubscriptions } from '../api/client'
-import type { DiscoveryAnime, Subscription, SubscriptionCreateRequest } from '../types'
+import { useCallback, useEffect, useRef, useState } from 'react'
+import {
+  createAutoSubscribeRule,
+  deleteAutoSubscribeRule,
+  discoverySeason,
+  discoverySubscribe,
+  listAutoSubscribeRules,
+  listSubscriptions,
+  updateAutoSubscribeRule,
+} from '../api/client'
+import type {
+  AutoSubscribeRule,
+  AutoSubscribeRuleCreateRequest,
+  DiscoveryAnime,
+  Subscription,
+  SubscriptionCreateRequest,
+} from '../types'
 import { useI18n } from '../i18n/useI18n'
-import { Card, Button, Input, Select, Badge, Loading, EmptyState } from '../components/ui'
-import { Compass, Search, Plus, Filter, X } from 'lucide-react'
+import { usePolling } from '../hooks/usePolling'
+import { useToast } from '../hooks/useToast'
+import { Card, Button, Input, Select, Badge, EmptyState, Modal, SkeletonCard } from '../components/ui'
+import { DiscoveryRuleForm } from './DiscoveryRuleForm'
+import { Compass, Search, Plus, Filter, X, Settings2 } from 'lucide-react'
 
 const SEASONS = ['WINTER', 'SPRING', 'SUMMER', 'FALL']
 const CACHE_KEY = 'animeagent-discovery-cache'
@@ -46,8 +63,22 @@ function getCachedResults(): DiscoveryAnime[] {
   return loadCache()?.results ?? []
 }
 
+const EMPTY_RULE: AutoSubscribeRuleCreateRequest = {
+  name: '',
+  include_genres: '',
+  exclude_genres: '',
+  include_formats: '',
+  exclude_formats: '',
+  include_keywords: '',
+  exclude_keywords: '',
+  min_score: undefined,
+  use_llm: false,
+  enabled: true,
+}
+
 export function Discovery() {
   const { t } = useI18n()
+  const { showToast } = useToast()
   const [year, setYear] = useState<number>(getCachedYear)
   const [season, setSeason] = useState<string>(getCachedSeason)
   const [results, setResults] = useState<DiscoveryAnime[]>(getCachedResults)
@@ -60,33 +91,65 @@ export function Discovery() {
   const [searchQuery, setSearchQuery] = useState('')
   const [typeFilter, setTypeFilter] = useState('')
 
-  // Load subscriptions; auto-load if no cache
-  useEffect(() => {
-    listSubscriptions().then(setSubscriptions).catch(() => {})
+  // Rules
+  const [showRules, setShowRules] = useState(false)
+  const [rules, setRules] = useState<AutoSubscribeRule[]>([])
+  const [editingRule, setEditingRule] = useState<AutoSubscribeRule | null>(null)
+  const [ruleForm, setRuleForm] = useState<AutoSubscribeRuleCreateRequest>(EMPTY_RULE)
+  const [ruleSaving, setRuleSaving] = useState(false)
 
-    if (results.length === 0) {
-      // No cache — fetch current season
-      void (async () => {
-        setLoading(true)
-        try {
-          const data = await discoverySeason(year, season)
-          setResults(data)
-          saveCache({ year, season, results: data, timestamp: Date.now() })
-        } catch {
-          // silent
-        } finally {
-          setLoading(false)
-        }
-      })()
+  const loadRules = useCallback(async () => {
+    try {
+      const data = await listAutoSubscribeRules()
+      setRules(data)
+    } catch {
+      // silent
     }
   }, [])
 
-  async function handleSearch(y?: number, s?: string) {
+  const initialSearchRef = useRef(true)
+
+  // Load subscriptions and rules on mount, then poll lightly to keep "subscribed" state fresh
+  useEffect(() => {
+    listSubscriptions().then(setSubscriptions).catch(() => {})
+    // eslint-disable-next-line react-hooks/set-state-in-effect
+    loadRules()
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [])
+
+  usePolling(
+    useCallback(async () => {
+      try {
+        const subs = await listSubscriptions()
+        setSubscriptions(subs)
+      } catch {
+        // silent
+      }
+      await loadRules()
+    }, [loadRules]),
+    10000
+  )
+
+  // Debounced backend search; skip the very first run to avoid duplicating mount loads
+  useEffect(() => {
+    if (initialSearchRef.current) {
+      initialSearchRef.current = false
+      return
+    }
+    const timer = setTimeout(() => {
+      void handleSearch(year, season, searchQuery)
+    }, 400)
+    return () => clearTimeout(timer)
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [searchQuery])
+
+  async function handleSearch(y?: number, s?: string, query?: string) {
     const searchYear = y ?? year
     const searchSeason = s ?? season
     setLoading(true)
+    setError(null)
     try {
-      const data = await discoverySeason(searchYear, searchSeason)
+      const data = await discoverySeason(searchYear, searchSeason, true, query)
       setResults(data)
       setYear(searchYear)
       setSeason(searchSeason)
@@ -130,7 +193,7 @@ export function Discovery() {
         season: anime.season || season,
       }
       await discoverySubscribe(payload)
-      // Refresh subscriptions to update "already subscribed" status
+      showToast(t.discovery.subscribeSuccess)
       listSubscriptions().then(setSubscriptions).catch(() => {})
     } catch (err) {
       setError(err instanceof Error ? err.message : t.common.error)
@@ -141,6 +204,52 @@ export function Discovery() {
         return next
       })
     }
+  }
+
+  async function handleSaveRule(e: React.FormEvent) {
+    e.preventDefault()
+    setRuleSaving(true)
+    try {
+      if (editingRule) {
+        await updateAutoSubscribeRule(editingRule.id, ruleForm)
+      } else {
+        await createAutoSubscribeRule(ruleForm)
+      }
+      setEditingRule(null)
+      setRuleForm(EMPTY_RULE)
+      await loadRules()
+      showToast(t.discovery.ruleSaved)
+    } catch (err) {
+      setError(err instanceof Error ? err.message : t.common.error)
+    } finally {
+      setRuleSaving(false)
+    }
+  }
+
+  async function handleDeleteRule(id: number) {
+    if (!confirm('确定要删除这条规则吗？')) return
+    try {
+      await deleteAutoSubscribeRule(id)
+      await loadRules()
+    } catch (err) {
+      setError(err instanceof Error ? err.message : t.common.error)
+    }
+  }
+
+  function startEditRule(rule: AutoSubscribeRule) {
+    setEditingRule(rule)
+    setRuleForm({
+      name: rule.name,
+      include_genres: rule.include_genres || '',
+      exclude_genres: rule.exclude_genres || '',
+      include_formats: rule.include_formats || '',
+      exclude_formats: rule.exclude_formats || '',
+      include_keywords: rule.include_keywords || '',
+      exclude_keywords: rule.exclude_keywords || '',
+      min_score: rule.min_score ?? undefined,
+      use_llm: rule.use_llm,
+      enabled: rule.enabled,
+    })
   }
 
   const seasonOptions = SEASONS.map((s) => ({
@@ -156,16 +265,9 @@ export function Discovery() {
     { value: 'ONA', label: 'ONA' },
   ]
 
-  // Apply filters
+  // Apply type filter client-side; search is handled by backend.
   const filteredResults = results.filter((item) => {
-    // Type filter
     if (typeFilter && item.format !== typeFilter) return false
-    // Search filter
-    if (searchQuery) {
-      const q = searchQuery.toLowerCase()
-      const title = (item.title_chinese || item.title_native || item.title_romaji || item.title_english || '').toLowerCase()
-      if (!title.includes(q)) return false
-    }
     return true
   })
 
@@ -183,6 +285,10 @@ export function Discovery() {
             {year} {currentSeasonLabel} · {results.length} {t.discovery.animeCount}
           </p>
         </div>
+        <Button variant="secondary" onClick={() => setShowRules(true)}>
+          <Settings2 className="h-4 w-4" />
+          {t.discovery.autoSubscribeRules}
+        </Button>
       </div>
 
       {/* Error banner */}
@@ -217,50 +323,53 @@ export function Discovery() {
             </div>
           </div>
 
-          {/* Row 2: Filters (only show when results exist) */}
-          {results.length > 0 && (
-            <div className="flex items-center gap-3 border-t border-slate-100 dark:border-slate-800 pt-4">
-              <div className="relative flex-1">
-                <Search className="absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-slate-400" />
-                <input
-                  type="text"
-                  placeholder={t.discovery.searchPlaceholder}
-                  value={searchQuery}
-                  onChange={(e) => setSearchQuery(e.target.value)}
-                  className="w-full rounded-xl border border-slate-200 bg-white py-2.5 pl-10 pr-4 text-sm text-slate-900 placeholder:text-slate-400 focus:border-indigo-500 focus:outline-none focus:ring-2 focus:ring-indigo-500/20 dark:border-slate-700 dark:bg-slate-900 dark:text-white dark:placeholder:text-slate-500"
-                />
-                {searchQuery && (
-                  <button
-                    onClick={() => setSearchQuery('')}
-                    className="absolute right-3 top-1/2 -translate-y-1/2 text-slate-400 hover:text-slate-600"
-                  >
-                    <X className="h-4 w-4" />
-                  </button>
-                )}
-              </div>
-              <div className="flex gap-1.5">
-                {typeOptions.map((opt) => (
-                  <button
-                    key={opt.value}
-                    onClick={() => setTypeFilter(typeFilter === opt.value ? '' : opt.value)}
-                    className={`rounded-lg px-3 py-2 text-xs font-medium transition-colors ${
-                      typeFilter === opt.value
-                        ? 'bg-indigo-100 text-indigo-700 dark:bg-indigo-500/20 dark:text-indigo-300'
-                        : 'bg-slate-100 text-slate-600 hover:bg-slate-200 dark:bg-slate-800 dark:text-slate-400 dark:hover:bg-slate-700'
-                    }`}
-                  >
-                    {opt.label}
-                  </button>
-                ))}
-              </div>
+          {/* Row 2: Filters */}
+          <div className="flex items-center gap-3 border-t border-slate-100 pt-4 dark:border-slate-800">
+            <div className="relative flex-1">
+              <Search className="absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-slate-400" />
+              <input
+                type="text"
+                placeholder={t.discovery.searchPlaceholder}
+                value={searchQuery}
+                onChange={(e) => setSearchQuery(e.target.value)}
+                className="w-full rounded-xl border border-slate-200 bg-white py-2.5 pl-10 pr-4 text-sm text-slate-900 placeholder:text-slate-400 focus:border-indigo-500 focus:outline-none focus:ring-2 focus:ring-indigo-500/20 dark:border-slate-700 dark:bg-slate-900 dark:text-white dark:placeholder:text-slate-500"
+              />
+              {searchQuery && (
+                <button
+                  onClick={() => setSearchQuery('')}
+                  className="absolute right-3 top-1/2 -translate-y-1/2 text-slate-400 hover:text-slate-600"
+                >
+                  <X className="h-4 w-4" />
+                </button>
+              )}
             </div>
-          )}
+            <div className="flex gap-1.5">
+              {typeOptions.map((opt) => (
+                <button
+                  key={opt.value}
+                  onClick={() => setTypeFilter(typeFilter === opt.value ? '' : opt.value)}
+                  className={`rounded-lg px-3 py-2 text-xs font-medium transition-colors ${
+                    typeFilter === opt.value
+                      ? 'bg-indigo-100 text-indigo-700 dark:bg-indigo-500/20 dark:text-indigo-300'
+                      : 'bg-slate-100 text-slate-600 hover:bg-slate-200 dark:bg-slate-800 dark:text-slate-400 dark:hover:bg-slate-700'
+                  }`}
+                >
+                  {opt.label}
+                </button>
+              ))}
+            </div>
+          </div>
         </div>
       </Card>
 
       {/* Results */}
-      {loading ? (
-        <Loading message={t.discovery.searching} />
+      {loading && results.length === 0 ? (
+        <div className="space-y-3">
+          <SkeletonCard />
+          <SkeletonCard />
+          <SkeletonCard />
+          <SkeletonCard />
+        </div>
       ) : filteredResults.length === 0 ? (
         <EmptyState
           title={results.length > 0 ? t.discovery.noMatch : t.discovery.noResults}
@@ -323,6 +432,62 @@ export function Discovery() {
             </Card>
           ))}
         </div>
+      )}
+
+      {/* Auto-subscribe rules modal */}
+      {showRules && (
+        <Modal
+          title={t.discovery.autoSubscribeRules}
+          onClose={() => setShowRules(false)}
+          size="lg"
+          footer={
+            editingRule === null ? (
+              <Button variant="primary" onClick={() => { setEditingRule(null); setRuleForm(EMPTY_RULE) }}>
+                <Plus className="h-4 w-4" />
+                {t.discovery.addRule}
+              </Button>
+            ) : undefined
+          }
+        >
+          <div className="space-y-4">
+            {rules.length === 0 && !editingRule ? (
+              <p className="text-sm text-slate-500 dark:text-slate-400">{t.discovery.noRules}</p>
+            ) : (
+              <div className="space-y-2">
+                {rules.map((rule) => (
+                  <Card key={rule.id} className="flex items-center justify-between">
+                    <div>
+                      <p className="font-medium text-slate-900 dark:text-white">{rule.name}</p>
+                      <p className="text-xs text-slate-500 dark:text-slate-400">
+                        {rule.use_llm ? 'LLM · ' : ''}
+                        {rule.enabled ? t.discovery.enabled : t.discovery.disabled}
+                      </p>
+                    </div>
+                    <div className="flex items-center gap-2">
+                      <Button variant="secondary" size="sm" onClick={() => startEditRule(rule)}>
+                        {t.common.edit}
+                      </Button>
+                      <Button variant="danger" size="sm" onClick={() => handleDeleteRule(rule.id)}>
+                        {t.common.delete}
+                      </Button>
+                    </div>
+                  </Card>
+                ))}
+              </div>
+            )}
+
+            {(editingRule !== null || rules.length === 0) && (
+              <DiscoveryRuleForm
+                ruleForm={ruleForm}
+                setRuleForm={setRuleForm}
+                editingRule={editingRule}
+                saving={ruleSaving}
+                onSubmit={handleSaveRule}
+                onCancel={() => { setEditingRule(null); setRuleForm(EMPTY_RULE) }}
+              />
+            )}
+          </div>
+        </Modal>
       )}
     </div>
   )

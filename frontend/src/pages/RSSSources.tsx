@@ -2,7 +2,9 @@ import { useCallback, useEffect, useState } from 'react'
 import { createRSSSource, deleteRSSSource, listRSSSources, updateRSSSource } from '../api/client'
 import type { RSSSource } from '../types'
 import { useI18n } from '../i18n/useI18n'
-import { Card, Button, Input, Switch, Badge, Loading, EmptyState } from '../components/ui'
+import { usePolling } from '../hooks/usePolling'
+import { useToast } from '../hooks/useToast'
+import { Card, Button, Input, Switch, Badge, EmptyState, Modal, SkeletonCard } from '../components/ui'
 import { Rss, Plus, Pencil, Trash2, X } from 'lucide-react'
 
 interface FormData {
@@ -38,19 +40,23 @@ function fromParserRules(rules: string | null): { include: string; exclude: stri
   }
 }
 
+const EMPTY_FORM: FormData = {
+  name: '',
+  url: '',
+  includeKeywords: '',
+  excludeKeywords: '',
+  is_active: true,
+}
+
 export function RSSSources() {
   const { t } = useI18n()
+  const { showToast } = useToast()
   const [sources, setSources] = useState<RSSSource[]>([])
   const [loading, setLoading] = useState(true)
   const [error, setError] = useState<string | null>(null)
-  const [form, setForm] = useState<FormData>({
-    name: '',
-    url: '',
-    includeKeywords: '',
-    excludeKeywords: '',
-    is_active: true,
-  })
+  const [form, setForm] = useState<FormData>(EMPTY_FORM)
   const [editing, setEditing] = useState<RSSSource | null>(null)
+  const [showModal, setShowModal] = useState(false)
 
   const load = useCallback(async () => {
     setLoading(true)
@@ -67,6 +73,7 @@ export function RSSSources() {
 
   // eslint-disable-next-line react-hooks/set-state-in-effect -- initial data load
   useEffect(() => { void load() }, [load])
+  usePolling(load, 10000)
 
   async function handleSubmit(e: React.FormEvent) {
     e.preventDefault()
@@ -79,7 +86,6 @@ export function RSSSources() {
           parser_rules,
           is_active: form.is_active,
         })
-        setEditing(null)
       } else {
         await createRSSSource({
           name: form.name,
@@ -88,8 +94,10 @@ export function RSSSources() {
           is_active: form.is_active,
         })
       }
-      setForm({ name: '', url: '', includeKeywords: '', excludeKeywords: '', is_active: true })
+      resetForm()
+      setShowModal(false)
       await load()
+      showToast(t.rssSources.saveSuccess)
     } catch (err) {
       setError(err instanceof Error ? err.message : t.rssSources.saveError)
     }
@@ -105,6 +113,11 @@ export function RSSSources() {
     }
   }
 
+  function resetForm() {
+    setEditing(null)
+    setForm(EMPTY_FORM)
+  }
+
   function startEdit(source: RSSSource) {
     const { include, exclude } = fromParserRules(source.parser_rules)
     setEditing(source)
@@ -115,11 +128,12 @@ export function RSSSources() {
       excludeKeywords: exclude,
       is_active: source.is_active,
     })
+    setShowModal(true)
   }
 
-  function cancelEdit() {
-    setEditing(null)
-    setForm({ name: '', url: '', includeKeywords: '', excludeKeywords: '', is_active: true })
+  function startAdd() {
+    resetForm()
+    setShowModal(true)
   }
 
   /** Render parser_rules as human-readable badges */
@@ -139,15 +153,34 @@ export function RSSSources() {
     )
   }
 
-  if (loading) return <Loading message={t.common.loading} />
+  if (loading) {
+    return (
+      <div className="space-y-8">
+        <div>
+          <h1 className="text-2xl font-bold tracking-tight text-slate-900 dark:text-white">
+            {t.rssSources.title}
+          </h1>
+        </div>
+        <div className="space-y-3">
+          <SkeletonCard />
+          <SkeletonCard />
+          <SkeletonCard />
+        </div>
+      </div>
+    )
+  }
 
   return (
     <div className="space-y-8">
       {/* Page header */}
-      <div>
+      <div className="flex items-center justify-between">
         <h1 className="text-2xl font-bold tracking-tight text-slate-900 dark:text-white">
           {t.rssSources.title}
         </h1>
+        <Button variant="primary" onClick={startAdd}>
+          <Plus className="h-4 w-4" />
+          {t.common.add}
+        </Button>
       </div>
 
       {/* Error banner */}
@@ -156,73 +189,6 @@ export function RSSSources() {
           <p className="text-sm text-rose-600 dark:text-rose-400">{error}</p>
         </Card>
       )}
-
-      {/* Add/Edit form */}
-      <Card>
-        <h2 className="mb-4 text-base font-semibold text-slate-900 dark:text-white">
-          {editing ? t.rssSources.editTitle : t.rssSources.addTitle}
-        </h2>
-        <form onSubmit={handleSubmit} className="space-y-4">
-          <div className="grid grid-cols-1 gap-4 sm:grid-cols-2">
-            <Input
-              label={t.rssSources.form.name}
-              placeholder={t.rssSources.form.namePlaceholder}
-              value={form.name}
-              onChange={(e) => setForm({ ...form, name: e.target.value })}
-              required
-            />
-            <Input
-              label={t.rssSources.form.url}
-              placeholder={t.rssSources.form.urlPlaceholder}
-              value={form.url}
-              onChange={(e) => setForm({ ...form, url: e.target.value })}
-              required
-            />
-          </div>
-          <div className="grid grid-cols-1 gap-4 sm:grid-cols-2">
-            <Input
-              label={t.rssSources.form.includeKeywords}
-              placeholder={t.rssSources.form.includePlaceholder}
-              value={form.includeKeywords}
-              onChange={(e) => setForm({ ...form, includeKeywords: e.target.value })}
-            />
-            <Input
-              label={t.rssSources.form.excludeKeywords}
-              placeholder={t.rssSources.form.excludePlaceholder}
-              value={form.excludeKeywords}
-              onChange={(e) => setForm({ ...form, excludeKeywords: e.target.value })}
-            />
-          </div>
-          <div className="flex items-center gap-6">
-            <Switch
-              checked={form.is_active ?? true}
-              onChange={(checked) => setForm({ ...form, is_active: checked })}
-              label={t.rssSources.form.active}
-            />
-            <div className="flex items-center gap-3">
-              <Button type="submit" variant="primary">
-                {editing ? (
-                  <>
-                    <Pencil className="h-4 w-4" />
-                    {t.common.update}
-                  </>
-                ) : (
-                  <>
-                    <Plus className="h-4 w-4" />
-                    {t.common.add}
-                  </>
-                )}
-              </Button>
-              {editing && (
-                <Button type="button" variant="ghost" onClick={cancelEdit}>
-                  <X className="h-4 w-4" />
-                  {t.common.cancel}
-                </Button>
-              )}
-            </div>
-          </div>
-        </form>
-      </Card>
 
       {/* Source list */}
       {sources.length === 0 ? (
@@ -241,7 +207,7 @@ export function RSSSources() {
                       {source.name}
                     </h3>
                     <Badge variant={source.is_active ? 'success' : 'muted'}>
-                      {source.is_active ? t.common.active : t.common.none}
+                      {source.is_active ? t.common.active : t.common.inactive}
                     </Badge>
                   </div>
                   <p className="mt-0.5 truncate text-sm text-slate-500 dark:text-slate-400">
@@ -263,6 +229,73 @@ export function RSSSources() {
             </Card>
           ))}
         </div>
+      )}
+
+      {/* Add/Edit modal */}
+      {showModal && (
+        <Modal
+          title={editing ? t.rssSources.editTitle : t.rssSources.addTitle}
+          onClose={() => { setShowModal(false); resetForm() }}
+        >
+          <form onSubmit={handleSubmit} className="space-y-4">
+            <div className="grid grid-cols-1 gap-4 sm:grid-cols-2">
+              <Input
+                label={t.rssSources.form.name}
+                placeholder={t.rssSources.form.namePlaceholder}
+                value={form.name}
+                onChange={(e) => setForm({ ...form, name: e.target.value })}
+                required
+              />
+              <Input
+                label={t.rssSources.form.url}
+                placeholder={t.rssSources.form.urlPlaceholder}
+                value={form.url}
+                onChange={(e) => setForm({ ...form, url: e.target.value })}
+                required
+              />
+            </div>
+            <div className="grid grid-cols-1 gap-4 sm:grid-cols-2">
+              <Input
+                label={t.rssSources.form.includeKeywords}
+                placeholder={t.rssSources.form.includePlaceholder}
+                value={form.includeKeywords}
+                onChange={(e) => setForm({ ...form, includeKeywords: e.target.value })}
+              />
+              <Input
+                label={t.rssSources.form.excludeKeywords}
+                placeholder={t.rssSources.form.excludePlaceholder}
+                value={form.excludeKeywords}
+                onChange={(e) => setForm({ ...form, excludeKeywords: e.target.value })}
+              />
+            </div>
+            <div className="flex items-center gap-6">
+              <Switch
+                checked={form.is_active ?? true}
+                onChange={(checked) => setForm({ ...form, is_active: checked })}
+                label={t.rssSources.form.active}
+              />
+            </div>
+            <div className="flex justify-end gap-3 pt-2">
+              <Button type="button" variant="secondary" onClick={() => { setShowModal(false); resetForm() }}>
+                <X className="h-4 w-4" />
+                {t.common.cancel}
+              </Button>
+              <Button type="submit" variant="primary">
+                {editing ? (
+                  <>
+                    <Pencil className="h-4 w-4" />
+                    {t.common.update}
+                  </>
+                ) : (
+                  <>
+                    <Plus className="h-4 w-4" />
+                    {t.common.add}
+                  </>
+                )}
+              </Button>
+            </div>
+          </form>
+        </Modal>
       )}
     </div>
   )

@@ -18,14 +18,12 @@ export function usePolling(
   useEffect(() => {
     if (!enabled || intervalMs <= 0) return
 
-    let timerId: number | undefined
-
     const tick = () => {
       if (document.visibilityState === 'hidden') return
       void savedCallback.current()
     }
 
-    timerId = window.setInterval(tick, intervalMs)
+    const timerId = window.setInterval(tick, intervalMs)
 
     const handleVisibility = () => {
       if (document.visibilityState === 'visible') {

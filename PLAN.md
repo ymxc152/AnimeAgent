@@ -59,10 +59,22 @@
 
 ### Phase E：UI 美化（贯穿以上各阶段）
 
-- 统一 Card 间距、阴影、hover 动效。
-- 表格/列表增加空状态、loading 骨架屏。
-- 关键操作按钮固定位置，减少滚动。
-- 颜色语义：失败用红色、下载中用蓝色、完成用绿色。
+- **统一 Card 外框与 padding**
+  - `SkeletonCard`、`EmptyState`、`Loading` 统一使用 `Card` 外框。
+  - `EmptyState` 去掉独立虚线框，由 `Card` 提供外框。
+  - `Loading` 增加可选 `card` 属性：全页加载保持纯居中，列表/区块加载套 `Card`。
+  - `Card` padding 规范：列表项/详情项/错误提示默认 `md`；筛选栏/表单区 `sm`；`EmptyState`/`Loading` 套 `Card` 时 `lg`；`StatCard` 保持 `md`；`Modal` 内部不再套 `Card`。
+- **统一阴影与 hover 动效**
+  - 两级阴影：`shadow-sm`（卡片常态）、`shadow-lg`（卡片悬停/按钮/`StatCard` icon/`Modal`）。
+  - `Card` hover 保持 `hover:-translate-y-0.5 hover:shadow-lg`。
+- **Skeleton 细节**
+  - `SkeletonCard` 新增 `variant: 'list-item' | 'stat' | 'compact'`，先实现 `list-item` 覆盖 Discovery/RSSSources 列表。
+- **关键操作按钮固定位置**
+  - 各列表页右下角放置主操作 FAB：`Subscriptions`（新增订阅）、`Episodes`（刷新）、`Discovery`（新增规则）、`RSS Sources`（新增 RSS 源）。
+  - 每个页面左下角放置圆形刷新 FAB。
+- **颜色语义**
+  - `Badge` 状态色已映射，保持不变。
+  - 下载进度条统一蓝色（sky→cyan 渐变），不按完成度/状态变色。
 
 ---
 
@@ -196,7 +208,7 @@ for rule in enabled_rules:
 - [ ] 首页 `/api/subscriptions` 100 条订阅响应 < 300ms
 - [ ] 健康检查仅在首次加载和手动刷新时调用
 - [ ] Dashboard/Subscriptions/Episodes 每 5 秒自动刷新
-- [ ] 剧集"下载中"状态显示实时速度与进度条
+- [x] 剧集"下载中"状态显示实时速度与进度条（使用 qBittorrent 真实 `progress` 字段）
 - [ ] 所有状态标签中文展示
 - [ ] 剧集状态支持多选筛选
 - [ ] 点击剧集卡片弹出详情抽屉，展示种子/hash/路径/日志

@@ -1,6 +1,7 @@
 import { useCallback, useEffect, useState } from 'react'
 import { listLogs } from '../api/client'
 import { useI18n } from '../i18n/useI18n'
+import { usePolling } from '../hooks/usePolling'
 import { Card, Button, Input, Loading, EmptyState } from '../components/ui'
 import { ScrollText, RefreshCw } from 'lucide-react'
 
@@ -27,6 +28,7 @@ export function Logs() {
 
   // eslint-disable-next-line react-hooks/set-state-in-effect -- initial data load
   useEffect(() => { void load() }, [load])
+  usePolling(load, 10000)
 
   return (
     <div className="space-y-8">

@@ -1,4 +1,5 @@
 import { useCallback, useEffect, useMemo, useState } from 'react'
+import { useSearchParams } from 'react-router-dom'
 import {
   getEpisodeDetail,
   listEpisodes,
@@ -66,10 +67,14 @@ function parseTorrentProgress(status: string | null): number {
 
 export function Episodes() {
   const { t } = useI18n()
+  const [searchParams, setSearchParams] = useSearchParams()
   const [episodes, setEpisodes] = useState<Episode[]>([])
   const [subscriptions, setSubscriptions] = useState<Subscription[]>([])
-  const [subscriptionId, setSubscriptionId] = useState<string>('')
-  const [statusFilter, setStatusFilter] = useState<string[]>([])
+  const [subscriptionId, setSubscriptionId] = useState<string>(() => searchParams.get('subscription_id') || '')
+  const [statusFilter, setStatusFilter] = useState<string[]>(() => {
+    const status = searchParams.get('status')
+    return status ? status.split(',') : []
+  })
   const [loading, setLoading] = useState(true)
   const [error, setError] = useState<string | null>(null)
   const [humanInput, setHumanInput] = useState<Record<number, string>>({})
@@ -97,15 +102,21 @@ export function Episodes() {
     }
   }, [subscriptionId, statusFilter])
 
+  // eslint-disable-next-line react-hooks/set-state-in-effect
   useEffect(() => { void load() }, [load])
   usePolling(load, POLL_INTERVAL)
 
+  // Sync filters with URL query params
   useEffect(() => {
-    if (detailId === null) {
-      setDetail(null)
-      return
-    }
-    setDetailLoading(true)
+    const params = new URLSearchParams()
+    if (subscriptionId) params.set('subscription_id', subscriptionId)
+    if (statusFilter.length > 0) params.set('status', statusFilter.join(','))
+    setSearchParams(params, { replace: true })
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [subscriptionId, statusFilter])
+
+  useEffect(() => {
+    if (detailId === null) return
     getEpisodeDetail(detailId)
       .then(setDetail)
       .catch((err) => setError(err instanceof Error ? err.message : t.common.error))
@@ -205,7 +216,7 @@ export function Episodes() {
             <Card
               key={ep.id}
               hover
-              onClick={() => setDetailId(ep.id)}
+              onClick={() => { setDetailId(ep.id); setDetailLoading(true) }}
               className="cursor-pointer"
             >
               <div className="flex flex-col gap-4 sm:flex-row sm:items-start sm:justify-between">
@@ -306,7 +317,13 @@ export function Episodes() {
       {/* Detail modal */}
       {detailId !== null && (
         <Modal
-          title={detail ? `${detail.subscription_title} · 第 ${detail.episode_number} 集详情` : t.episodes.title}
+          title={
+            detail
+              ? t.episodes.detail.title
+                  .replace('{title}', detail.subscription_title || t.discovery.unknown)
+                  .replace('{number}', String(detail.episode_number))
+              : t.episodes.title
+          }
           onClose={() => setDetailId(null)}
           size="lg"
         >
@@ -323,22 +340,22 @@ export function Episodes() {
                 )}
               </div>
 
-              <DetailSection title="种子信息" icon={<Download className="h-4 w-4" />}>
-                <DetailRow label="种子标题" value={detail.torrent_title} />
-                <DetailRow label="种子名称" value={detail.torrent_name} />
-                <DetailRow label="Info Hash" value={detail.torrent_info_hash || detail.torrent_hash} />
-                <DetailRow label="qB 状态" value={detail.torrent_status} />
-                <DetailRow label="下载速度" value={formatSpeed(detail.torrent_last_speed)} />
-                <DetailRow label="候选数量" value={String(detail.torrent_candidates_count)} />
+              <DetailSection title={t.episodes.detail.torrentInfo} icon={<Download className="h-4 w-4" />}>
+                <DetailRow label={t.episodes.torrentTitle} value={detail.torrent_title} />
+                <DetailRow label={t.episodes.detail.torrentName} value={detail.torrent_name} />
+                <DetailRow label={t.episodes.detail.infoHash} value={detail.torrent_info_hash || detail.torrent_hash} />
+                <DetailRow label={t.episodes.detail.qbStatus} value={detail.torrent_status} />
+                <DetailRow label={t.episodes.detail.downloadSpeed} value={formatSpeed(detail.torrent_last_speed)} />
+                <DetailRow label={t.episodes.detail.candidateCount} value={String(detail.torrent_candidates_count)} />
               </DetailSection>
 
-              <DetailSection title="路径" icon={<Info className="h-4 w-4" />}>
-                <DetailRow label="下载路径" value={detail.download_path} />
-                <DetailRow label="整理路径" value={detail.organized_path} />
+              <DetailSection title={t.episodes.detail.paths} icon={<Info className="h-4 w-4" />}>
+                <DetailRow label={t.episodes.detail.downloadPath} value={detail.download_path} />
+                <DetailRow label={t.episodes.detail.organizedPath} value={detail.organized_path} />
               </DetailSection>
 
               {detail.torrent_failed_hashes.length > 0 && (
-                <DetailSection title="已失败 Hash" icon={<AlertTriangle className="h-4 w-4" />}>
+                <DetailSection title={t.episodes.detail.failedHashes} icon={<AlertTriangle className="h-4 w-4" />}>
                   <ul className="list-inside list-disc space-y-1 text-sm text-slate-600 dark:text-slate-400">
                     {detail.torrent_failed_hashes.map((h) => (
                       <li key={h} className="break-all">{h}</li>
@@ -348,7 +365,7 @@ export function Episodes() {
               )}
 
               {detail.error_log && (
-                <DetailSection title="错误日志" icon={<AlertTriangle className="h-4 w-4 text-rose-500" />}>
+                <DetailSection title={t.episodes.errorLog} icon={<AlertTriangle className="h-4 w-4 text-rose-500" />}>
                   <p className="whitespace-pre-wrap rounded-lg bg-rose-50 px-3 py-2 text-sm text-rose-600 dark:bg-rose-950/20 dark:text-rose-400">
                     {detail.error_log}
                   </p>
@@ -356,7 +373,7 @@ export function Episodes() {
               )}
 
               {detail.torrent_candidates.length > 0 && (
-                <DetailSection title="候选种子" icon={<Info className="h-4 w-4" />}>
+                <DetailSection title={t.episodes.detail.candidates} icon={<Info className="h-4 w-4" />}>
                   <div className="max-h-48 overflow-y-auto space-y-2">
                     {detail.torrent_candidates.slice(0, 20).map((c, idx) => (
                       <div
