@@ -197,3 +197,25 @@ def test_fetch_rss_leaves_unknown_sources_unchanged():
     node = FetchRSSNode()
     original = "https://example.com/rss?search=1080p"
     assert node._build_source_url(original, "Frieren") == original
+
+
+def test_fetch_rss_prefers_romaji_for_nyaa():
+    """FetchRSSNode should use romaji title for Nyaa sources."""
+    node = FetchRSSNode()
+    state = {
+        "title_romaji": "Otonari no Tenshi-sama",
+        "title_native": "お隣の天使様",
+        "title_chinese": "关于邻家的天使大人",
+    }
+    assert node._search_title(state, "nyaa.si") == "Otonari no Tenshi-sama"
+
+
+def test_fetch_rss_prefers_chinese_for_animegarden():
+    """FetchRSSNode should use Chinese title for AnimeGarden sources."""
+    node = FetchRSSNode()
+    state = {
+        "title_romaji": "Otonari no Tenshi-sama",
+        "title_native": "お隣の天使様",
+        "title_chinese": "关于邻家的天使大人",
+    }
+    assert node._search_title(state, "api.animes.garden") == "关于邻家的天使大人"

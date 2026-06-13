@@ -108,7 +108,7 @@
 | 规划点 | 偏差说明 |
 |--------|----------|
 | 三层 LangGraph（对话/调度/Episode） | 仅 Episode Graph 实现；对话层、调度层 LangGraph 未实现。 |
-| Bangumi 优先 | 当前 AniList 优先；Bangumi 仅 fallback。 |
+| Bangumi 优先 | `MetadataResolver.get_seasonal` 已实现 Bangumi 优先、AniList fallback；DiscoveryService 与 Web 发现端点均走该逻辑。 |
 | 按播出周几智能调度 | 未实现播出时间门控；每 tick 扫描所有活跃 Episode。 |
 | 人工断点 | `match_torrent` 已实现低置信度计数，`reflect_match` 节点在多次低置信度后路由到 `human_review`；状态与 API 可用。 |
 | `process_metadata` 节点 | 未实现； organize_files 直接整理。 |
@@ -119,7 +119,7 @@
 
 - **P0**：~~修复 `match_torrent` 低置信度逻辑；处理前端测试失败；清理 lint/type 错误~~ ✅ **已完成**。
 - **P1**：统一 `torrent_hash` / `torrent_info_hash`；`OrganizeFilesNode` 使用 Subscription 真实季数；`PollDownloadNode` 实现自适应轮询间隔。
-- **P2**：Discovery 改为 Bangumi 优先；Scheduler 增加播出时间门控与错峰调度；实现 `process_metadata` 与 `notify_user` 节点。
+- **P2**：~~Discovery 改为 Bangumi 优先~~ ✅ **已完成**；Scheduler 增加播出时间门控与错峰调度；实现 `process_metadata` 与 `notify_user` 节点。
 - **P3**：实现最小对话层；按 OLD 设计补齐 Anime Garden 缓存、配置项与 StatusQueryService。
 
 ---

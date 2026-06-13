@@ -44,8 +44,9 @@ class FetchRSSNode:
             c.get("info_hash") for c in merged if c.get("info_hash")
         }
 
-        title = self._search_title(state)
         for source in sources:
+            hostname = urlparse(source.url).hostname or ""
+            title = self._search_title(state, hostname)
             url = self._build_source_url(source.url, title)
             logger.info("Fetching RSS source: {} ({})", source.name, url)
             result = await self.rss_tool.invoke(RSSToolInput(url=url))
@@ -108,13 +109,32 @@ class FetchRSSNode:
                 )
             return await store.rss_sources.list_active()
 
-    def _search_title(self, state: dict[str, Any]) -> str:
-        """Return the best title to inject into RSS search queries."""
-        for key in ("title_chinese", "title_romaji", "title_native"):
-            title = state.get(key)
-            if isinstance(title, str) and title:
-                return title
-        return ""
+    def _search_title(self, state: dict[str, Any], hostname: str) -> str:
+        """Return the best title to inject into RSS search queries.
+
+        Nyaa is dominated by romaji/native titles, so prefer romaji there.
+        AnimeGarden supports Chinese titles well, so prefer Chinese there.
+        """
+        title = ""
+        if "nyaa.si" in hostname:
+            for key in ("title_romaji", "title_native", "title_chinese"):
+                value = state.get(key)
+                if isinstance(value, str) and value:
+                    title = value
+                    break
+        elif "animes.garden" in hostname:
+            for key in ("title_chinese", "title_romaji", "title_native"):
+                value = state.get(key)
+                if isinstance(value, str) and value:
+                    title = value
+                    break
+        else:
+            for key in ("title_romaji", "title_chinese", "title_native"):
+                value = state.get(key)
+                if isinstance(value, str) and value:
+                    title = value
+                    break
+        return title
 
     def _build_source_url(self, url: str, title: str) -> str:
         """Narrow generic RSS feeds by appending the anime title to the query.
