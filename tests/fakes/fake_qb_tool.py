@@ -1,5 +1,6 @@
 """In-memory fake for QBTool used in end-to-end tests."""
 
+from datetime import UTC, datetime
 from pathlib import Path
 from typing import Any
 
@@ -49,6 +50,7 @@ class FakeQBTool(BaseTool):
             Path(content_path).parent.mkdir(parents=True, exist_ok=True)
             Path(content_path).write_bytes(b"fake video content")
 
+        now = datetime.now(UTC)
         self.torrents[info_hash] = {
             "hash": info_hash,
             "name": url,
@@ -58,6 +60,8 @@ class FakeQBTool(BaseTool):
             "size": 0,
             "save_path": save_path,
             "content_path": content_path,
+            "added_at": now,
+            "last_speed_at": now,
         }
         self.poll_counts[info_hash] = 0
         return ToolOutput(success=True, data={"hash": info_hash})
@@ -73,6 +77,7 @@ class FakeQBTool(BaseTool):
             torrent["progress"] = 1.0
             torrent["state"] = "completed"
 
+        now = datetime.now(UTC)
         status = {
             "hash": torrent["hash"],
             "name": torrent["name"],
@@ -82,7 +87,11 @@ class FakeQBTool(BaseTool):
             "size": torrent["size"],
             "save_path": torrent["save_path"],
             "content_path": torrent["content_path"],
+            "added_at": torrent["added_at"],
+            "last_speed_at": torrent["last_speed_at"],
         }
+        if torrent["progress"] >= 1.0:
+            torrent["last_speed_at"] = now
         return ToolOutput(success=True, data={"status": status})
 
     async def _delete(self, input_data: QBToolInput) -> ToolOutput:

@@ -2,6 +2,7 @@
 
 import asyncio
 import re
+from datetime import UTC, datetime
 from typing import Any, cast
 
 from qbittorrentapi import Client
@@ -93,15 +94,29 @@ class QBTool(BaseTool):
             return ToolOutput(success=False, error=f"Torrent {input_data.torrent_hash} not found")
 
         torrent = torrents[0]
+        now = datetime.now(UTC)
+        added_on = _get_value(torrent, "added_on")
+        added_at = _unix_to_utc(added_on) if added_on else now
+        dlspeed = _get_value(torrent, "dlspeed") or 0
+        last_activity = _get_value(torrent, "last_activity")
+        if dlspeed > 0:
+            last_speed_at = now
+        elif last_activity:
+            last_speed_at = _unix_to_utc(last_activity)
+        else:
+            last_speed_at = added_at
+
         status = {
             "hash": str(_get_value(torrent, "hash")).lower(),
             "name": _get_value(torrent, "name"),
             "progress": _get_value(torrent, "progress"),
             "state": _get_value(torrent, "state"),
-            "download_speed": _get_value(torrent, "dlspeed"),
+            "download_speed": dlspeed,
             "size": _get_value(torrent, "size"),
             "save_path": _get_value(torrent, "save_path"),
             "content_path": _get_value(torrent, "content_path"),
+            "added_at": added_at,
+            "last_speed_at": last_speed_at,
         }
         return ToolOutput(success=True, data={"status": status})
 
@@ -127,6 +142,11 @@ def _get_value(obj: Any, key: str) -> Any:
     if isinstance(obj, dict):
         return obj.get(key)
     return getattr(obj, key, None)
+
+
+def _unix_to_utc(timestamp: int | float) -> datetime:
+    """Convert a Unix timestamp to a timezone-aware UTC datetime."""
+    return datetime.fromtimestamp(float(timestamp), tz=UTC)
 
 
 def _extract_hash_from_url(url: str) -> str | None:

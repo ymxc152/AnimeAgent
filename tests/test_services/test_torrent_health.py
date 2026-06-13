@@ -79,3 +79,23 @@ def test_health_returns_healthy_when_active():
     result = TorrentHealth().evaluate(status, now=now)
 
     assert result["state"] == "healthy"
+
+
+def test_health_switches_on_error_state():
+    """TorrentHealth should recommend switch immediately for error state."""
+    status = _status(progress=0.3, state="error")
+
+    result = TorrentHealth().evaluate(status)
+
+    assert result["state"] == "failed"
+    assert result["recommend"] == "switch"
+
+
+def test_health_switches_on_missing_files():
+    """TorrentHealth should recommend switch immediately for missingFiles state."""
+    status = _status(progress=0.0, state="missingFiles")
+
+    result = TorrentHealth().evaluate(status)
+
+    assert result["state"] == "failed"
+    assert result["recommend"] == "switch"

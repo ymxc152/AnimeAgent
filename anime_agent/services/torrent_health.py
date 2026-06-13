@@ -24,6 +24,14 @@ class TorrentHealth:
         if progress >= 1.0 and state in ("uploading", "pausedUP", "queuedUP"):
             return {"state": "completed", "reason": "Download finished", "recommend": "process"}
 
+        # Hard failures: error / missing files should switch immediately.
+        if state in ("error", "missingFiles"):
+            return {
+                "state": "failed",
+                "reason": f"qBittorrent reports state={state}",
+                "recommend": "switch",
+            }
+
         # Metadata stuck
         if state == "metaDL":
             if (now - added_at).total_seconds() > self.METADATA_THRESHOLD_SECONDS:

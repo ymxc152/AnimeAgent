@@ -1,6 +1,6 @@
 """Tests for poll_download node."""
 
-from datetime import datetime
+from datetime import UTC, datetime, timedelta
 from unittest.mock import AsyncMock
 
 from anime_agent.agents.episode.nodes.poll_download import PollDownloadNode
@@ -43,6 +43,8 @@ async def test_poll_download_returns_downloaded_when_complete():
                 "state": "uploading",
                 "content_path": "/downloads/Anime - 01.mkv",
                 "name": "Anime - 01.mkv",
+                "added_at": datetime.now(UTC),
+                "last_speed_at": datetime.now(UTC),
             }
         },
     )
@@ -84,8 +86,11 @@ async def test_poll_download_uses_save_path_when_content_path_missing():
         data={
             "status": {
                 "progress": 1.0,
+                "state": "uploading",
                 "save_path": "/downloads",
                 "name": "Anime - 01",
+                "added_at": datetime.now(UTC),
+                "last_speed_at": datetime.now(UTC),
             }
         },
     )
@@ -141,3 +146,66 @@ async def test_poll_download_returns_retry_match_on_missing_files():
     result = await node(_state())
 
     assert result["status"] == "retry_match"
+
+
+async def test_poll_download_deletes_torrent_when_switching():
+    """poll_download should delete the torrent from qBittorrent when switching candidates."""
+    qb_tool = AsyncMock()
+    qb_tool.invoke.side_effect = [
+        ToolOutput(success=True, data={"status": {"progress": 0.0, "state": "error"}}),
+        ToolOutput(success=True, data={"deleted": True}),
+    ]
+
+    node = PollDownloadNode(qb_tool=qb_tool)
+    result = await node(_state())
+
+    assert result["status"] == "retry_match"
+    assert qb_tool.invoke.await_count == 2
+    delete_call = qb_tool.invoke.await_args_list[1][0][0]
+    assert delete_call.action == "delete"
+    assert delete_call.torrent_hash == "abc1"
+    assert delete_call.delete_files is False
+
+
+async def test_poll_download_uses_shorter_interval_for_metadata():
+    """poll_download should poll more frequently while metadata is downloading."""
+    qb_tool = AsyncMock()
+    qb_tool.invoke.return_value = ToolOutput(
+        success=True,
+        data={"status": {"progress": 0.0, "state": "metaDL"}},
+    )
+
+    node = PollDownloadNode(qb_tool=qb_tool)
+    result = await node(_state())
+
+    assert result["status"] == "downloading"
+    resume_after = datetime.fromisoformat(result["resume_after"])
+    expected_max = datetime.now(UTC) + timedelta(minutes=3)
+    assert resume_after < expected_max
+
+
+async def test_poll_download_uses_longer_interval_for_healthy():
+    """poll_download should poll less frequently for healthy downloads."""
+    now = datetime.now(UTC)
+    qb_tool = AsyncMock()
+    qb_tool.invoke.return_value = ToolOutput(
+        success=True,
+        data={
+            "status": {
+                "progress": 0.5,
+                "state": "downloading",
+                "download_speed": 1024000,
+                "added_at": now - timedelta(minutes=10),
+                "last_speed_at": now - timedelta(minutes=5),
+            }
+        },
+    )
+
+    node = PollDownloadNode(qb_tool=qb_tool)
+    result = await node(_state())
+
+    assert result["status"] == "downloading"
+    resume_after = datetime.fromisoformat(result["resume_after"])
+    expected_min = datetime.now(UTC) + timedelta(minutes=25)
+    expected_max = datetime.now(UTC) + timedelta(minutes=35)
+    assert expected_min < resume_after < expected_max

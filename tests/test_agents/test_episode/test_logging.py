@@ -67,6 +67,7 @@ class TestFetchRSSLogging:
         mock_session = AsyncMock()
         mock_store = MagicMock()
         mock_store.rss_sources.list_active = AsyncMock(return_value=[mock_source])
+        mock_store.rss_sources.get_by_id = AsyncMock(return_value=None)
 
         @asynccontextmanager
         async def _factory():

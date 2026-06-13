@@ -4,19 +4,27 @@ from datetime import UTC, datetime, timedelta
 from typing import Any
 
 from anime_agent.config import settings
+from anime_agent.services.torrent_health import TorrentHealth
 from anime_agent.tools.base import BaseTool
 from anime_agent.tools.qb_tool import QBTool, QBToolInput
 from anime_agent.utils.logger import logger
 
 
 class PollDownloadNode:
-    """Poll qBittorrent for torrent completion."""
+    """Poll qBittorrent for torrent completion and health."""
+
+    # Adaptive resume intervals (seconds) based on health state.
+    HEALTHY_INTERVAL_SECONDS = 30 * 60  # 30 min
+    METADATA_INTERVAL_SECONDS = 2 * 60  # 2 min
+    STALL_INTERVAL_SECONDS = 5 * 60  # 5 min
+    DEFAULT_INTERVAL_SECONDS = 10 * 60  # 10 min fallback
 
     def __init__(self, qb_tool: BaseTool | None = None):
         self.qb_tool = qb_tool or QBTool()
+        self.health = TorrentHealth()
 
     async def __call__(self, state: dict[str, Any]) -> dict[str, Any]:
-        """Check torrent download progress."""
+        """Check torrent download progress and recommend next action."""
         logger.info(
             "Polling download for episode {} of subscription {}",
             state.get("episode_number"),
@@ -42,18 +50,39 @@ class PollDownloadNode:
             }
 
         status = result.data.get("status", {})
-        progress = status.get("progress", 0.0)
-        qb_state = status.get("state", "")
+        health = self.health.evaluate(status)
+        state_name = health.get("state", "unknown")
+        recommend = health.get("recommend", "wait")
 
-        # Check for failed/stalled states
-        failed_states = ("error", "missingFiles", "stalledDL")
-        if qb_state in failed_states:
-            logger.warning(
-                "Torrent failed for episode {}: state={}, hash={}",
+        logger.info(
+            "Torrent health for episode {}: state={}, recommend={}",
+            state.get("episode_number"),
+            state_name,
+            recommend,
+        )
+
+        if recommend == "process":
+            content_path = status.get("content_path") or status.get("save_path")
+            download_files = [content_path] if content_path else []
+            logger.info(
+                "Download complete for episode {}: files={}",
                 state.get("episode_number"),
-                qb_state,
-                torrent_hash,
+                download_files,
             )
+            return {
+                "status": "downloaded",
+                "download_progress": 1.0,
+                "download_files": download_files,
+                "torrent_name": status.get("name"),
+            }
+
+        if recommend == "switch":
+            logger.warning(
+                "Torrent unhealthy for episode {} ({}); switching candidate",
+                state.get("episode_number"),
+                health.get("reason"),
+            )
+            await self._delete_torrent(torrent_hash)
             failed_hashes = list(state.get("torrent_failed_hashes", []))
             if torrent_hash not in failed_hashes:
                 failed_hashes.append(torrent_hash)
@@ -64,32 +93,40 @@ class PollDownloadNode:
                 "torrent_hash": None,
             }
 
-        if progress < 1.0:
-            resume_after = (
-                datetime.now(UTC) + timedelta(seconds=settings.check_interval_seconds)
-            ).isoformat()
-            logger.info(
-                "Download in progress for episode {}: {:.1f}%",
-                state.get("episode_number"),
-                progress * 100,
-            )
-            return {
-                "status": "downloading",
-                "download_progress": progress,
-                "resume_after": resume_after,
-            }
-
-        content_path = status.get("content_path") or status.get("save_path")
-        download_files = [content_path] if content_path else []
-
+        # recommend == "wait": schedule next poll adaptively.
+        progress = status.get("progress", 0.0)
+        interval = self._resume_interval(state_name)
+        resume_after = (datetime.now(UTC) + timedelta(seconds=interval)).isoformat()
         logger.info(
-            "Download complete for episode {}: files={}",
+            "Download in progress for episode {}: {:.1f}%, next poll in {}s",
             state.get("episode_number"),
-            download_files,
+            progress * 100,
+            interval,
         )
         return {
-            "status": "downloaded",
-            "download_progress": 1.0,
-            "download_files": download_files,
-            "torrent_name": status.get("name"),
+            "status": "downloading",
+            "download_progress": progress,
+            "resume_after": resume_after,
         }
+
+    def _resume_interval(self, state_name: str) -> int:
+        """Return the polling interval for a given health state."""
+        if state_name == "metadata_downloading":
+            return self.METADATA_INTERVAL_SECONDS
+        if state_name == "stalled":
+            return self.STALL_INTERVAL_SECONDS
+        if state_name == "healthy":
+            return self.HEALTHY_INTERVAL_SECONDS
+        # Slow / unknown: use configured default.
+        return settings.check_interval_seconds or self.DEFAULT_INTERVAL_SECONDS
+
+    async def _delete_torrent(self, torrent_hash: str) -> None:
+        """Remove a failed torrent from qBittorrent to avoid clutter."""
+        try:
+            delete_result = await self.qb_tool.invoke(
+                QBToolInput(action="delete", torrent_hash=torrent_hash, delete_files=False)
+            )
+            if not delete_result.success:
+                logger.warning("Failed to delete torrent {}: {}", torrent_hash, delete_result.error)
+        except Exception as exc:  # noqa: BLE001
+            logger.warning("Exception while deleting torrent {}: {}", torrent_hash, exc)

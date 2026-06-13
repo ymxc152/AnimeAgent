@@ -68,6 +68,7 @@ class TestFetchRSSNodeStatus:
         mock_session = AsyncMock()
         mock_store = MagicMock()
         mock_store.rss_sources.list_active = AsyncMock(return_value=[mock_source])
+        mock_store.rss_sources.get_by_id = AsyncMock(return_value=None)
 
         @asynccontextmanager
         async def _factory():
@@ -106,6 +107,7 @@ class TestFetchRSSNodeStatus:
         mock_session = AsyncMock()
         mock_store = MagicMock()
         mock_store.rss_sources.list_active = AsyncMock(return_value=[mock_source])
+        mock_store.rss_sources.get_by_id = AsyncMock(return_value=None)
 
         @asynccontextmanager
         async def _factory():
@@ -274,6 +276,8 @@ class TestPollDownloadNodeStatus:
 
     async def test_poll_download_returns_downloaded_when_complete(self, base_state):
         """PollDownloadNode should return status='downloaded' when complete."""
+        from datetime import UTC, datetime
+
         base_state["torrent_hash"] = "abc123"
 
         mock_tool = AsyncMock()
@@ -282,8 +286,11 @@ class TestPollDownloadNodeStatus:
             data={
                 "status": {
                     "progress": 1.0,
+                    "state": "uploading",
                     "name": "test.mkv",
                     "content_path": "/downloads/test.mkv",
+                    "added_at": datetime.now(UTC),
+                    "last_speed_at": datetime.now(UTC),
                 },
             },
         )
