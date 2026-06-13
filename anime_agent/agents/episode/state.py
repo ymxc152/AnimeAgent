@@ -23,6 +23,7 @@ class EpisodeAgentState(TypedDict):
     tmdb_data: dict[str, Any] | None
 
     # Execution intermediates
+    season: int
     torrent_candidates: list[dict[str, Any]]
     matched_torrent: dict[str, Any] | None
     torrent_hash: str | None

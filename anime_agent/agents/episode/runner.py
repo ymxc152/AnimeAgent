@@ -70,7 +70,11 @@ class EpisodeGraphRunner:
         candidates = self._load_json(cast(str | None, episode.torrent_candidates), default=[])
         failed_hashes = self._load_json(cast(str | None, episode.torrent_failed_hashes), default=[])
 
-        info_hash = cast(str | None, episode.torrent_info_hash)
+        info_hash = cast(str | None, episode.torrent_hash)
+        if not info_hash:
+            # Backward compatibility: some rows may still store the hash in
+            # torrent_info_hash while torrent_hash is empty.
+            info_hash = cast(str | None, episode.torrent_info_hash)
         link = cast(str | None, episode.torrent_link)
         matched_torrent = None
         if info_hash or link:
@@ -99,6 +103,7 @@ class EpisodeGraphRunner:
             title_romaji=cast(str, subscription.title_romaji),
             title_native=cast(str, subscription.title_native or ""),
             title_chinese=cast(str | None, subscription.title_chinese),
+            season=int(getattr(subscription, "season", 1) or 1),
             bangumi_data={},
             anilist_data={},
             tmdb_data=None,
