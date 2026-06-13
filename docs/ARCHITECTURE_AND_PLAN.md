@@ -115,6 +115,34 @@
 | 通知用户节点 | 已实现；`refresh_emby` 成功与 `handle_error` 后触发 `notify_user`。 |
 | 对话查询统计 | 未实现。 |
 
+### 前端体验优化与 qBittorrent 进度同步
+
+> 更新时间：2026-06-14。
+
+本轮依据 `PLAN.md` 补齐了前端交互与可选 B2：
+
+| 能力 | 实现位置 | 状态 |
+|------|----------|------|
+| 首页 `/api/subscriptions` N+1 修复 | `anime_agent/web.py` JOIN 聚合 | ✅ |
+| Dashboard 健康检查按需加载 + 手动刷新 | `frontend/src/pages/Dashboard.tsx` | ✅ |
+| 页面自动刷新（Dashboard/Subscriptions/Episodes 5s，RSS/Logs 10s） | `frontend/src/hooks/usePolling.ts` | ✅ |
+| 状态标签中文化 | `frontend/src/i18n/translations.ts` | ✅ |
+| 剧集下载进度条 / 速度 | `frontend/src/pages/Episodes.tsx` | ✅ |
+| 剧集状态多选筛选 | 后端 `status` 逗号分隔 + 前端 `MultiSelect` | ✅ |
+| 剧集详情弹窗 | `GET /api/episodes/{id}` + `frontend/src/pages/Episodes.tsx` | ✅ |
+| 发现页多语言搜索 | `anime_agent/web.py:/api/discovery/season?search=` + `frontend/src/pages/Discovery.tsx` | ✅ |
+| 自动订阅规则管理 | `AutoSubscribeRule` 模型/API + 前端弹窗 | ✅ |
+| LLM 辅助决策 | `anime_agent/services/auto_subscribe_llm_filter.py` | ✅ |
+| RSS 源弹窗 CRUD | `frontend/src/pages/RSSSources.tsx` | ✅ |
+| Toast 成功提示、URL 同步、骨架屏、前端测试 | `frontend/src/context/ToastProvider.tsx` 等 | ✅ |
+| 订阅 Bangumi/AniList ID 查询回填 | `GET /api/anime/lookup` + `frontend/src/pages/Subscriptions.tsx` | ✅ |
+| qBittorrent 进度主动同步（B2） | `anime_agent/services/qb_sync_service.py` + `scheduler.py` tick | ✅ |
+
+### 测试现状（更新）
+
+- **pytest**：`tests/test_web` 28 passed；全量运行当前有 9 个 agent 测试失败（organize/logging 相关），与本轮改动无直接关联，待处理。
+- **前端**：`npm run build` / `npm run lint` 通过；`npm run test` 7 passed。
+
 ### 后续建议优先级
 
 - **P0**：~~修复 `match_torrent` 低置信度逻辑；处理前端测试失败；清理 lint/type 错误~~ ✅ **已完成**。

@@ -10,6 +10,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from anime_agent.memory.models import (
     AutoSubscribeRule,
     Episode,
+    ErrorLog,
     RSSSource,
     Subscription,
     TaskSchedule,
@@ -109,6 +110,12 @@ class EpisodeStore:
     async def list_pending(self) -> list[Episode]:
         result = await self.session.execute(
             select(Episode).where(Episode.status == "pending").order_by(Episode.created_at)
+        )
+        return list(result.scalars().all())
+
+    async def list_by_statuses(self, statuses: list[str]) -> list[Episode]:
+        result = await self.session.execute(
+            select(Episode).where(Episode.status.in_(statuses)).order_by(Episode.created_at)
         )
         return list(result.scalars().all())
 
@@ -249,6 +256,46 @@ class AutoSubscribeRuleStore:
         await self.session.commit()
 
 
+class ErrorLogStore:
+    """Data access for error_logs table."""
+
+    def __init__(self, session: AsyncSession) -> None:
+        self.session = session
+
+    async def create(
+        self,
+        episode_id: int,
+        subscription_id: int,
+        node_name: str,
+        error_message: str = "",
+        bash_commands_tried: str = "[]",
+        llm_reasoning: str = "",
+        resolution: str = "",
+    ) -> ErrorLog:
+        log = ErrorLog(
+            episode_id=episode_id,
+            subscription_id=subscription_id,
+            node_name=node_name,
+            error_message=error_message,
+            bash_commands_tried=bash_commands_tried,
+            llm_reasoning=llm_reasoning,
+            resolution=resolution,
+        )
+        self.session.add(log)
+        await self.session.flush()
+        return log
+
+    async def list_recent(self, episode_id: int, limit: int = 5) -> list[ErrorLog]:
+        stmt = (
+            select(ErrorLog)
+            .where(ErrorLog.episode_id == episode_id)
+            .order_by(ErrorLog.created_at.desc())
+            .limit(limit)
+        )
+        result = await self.session.execute(stmt)
+        return list(result.scalars().all())
+
+
 class Store:
     """Combined store facade."""
 
@@ -259,6 +306,7 @@ class Store:
         self.user_requests = UserRequestStore(session)
         self.rss_sources = RSSSourceStore(session)
         self.auto_subscribe_rules = AutoSubscribeRuleStore(session)
+        self.error_logs = ErrorLogStore(session)
 
     async def __aenter__(self) -> "Store":
         return self

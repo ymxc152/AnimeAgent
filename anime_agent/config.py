@@ -1,9 +1,25 @@
 """Pydantic Settings for AnimeAgent."""
 
+from __future__ import annotations
+
+import platform
 from functools import lru_cache
+from pathlib import Path
 
 from pydantic import Field
 from pydantic_settings import BaseSettings, SettingsConfigDict
+
+
+def _detect_and_persist_os() -> str:
+    """Detect OS type and persist to .env if not already set."""
+    detected = platform.system()  # "Windows" or "Linux"
+    env_path = Path(".env")
+    if env_path.exists():
+        content = env_path.read_text(encoding="utf-8")
+        if "OS_TYPE=" not in content:
+            with env_path.open("a", encoding="utf-8") as f:
+                f.write(f"\nOS_TYPE={detected}\n")
+    return detected
 
 
 class Settings(BaseSettings):
@@ -49,7 +65,7 @@ class Settings(BaseSettings):
     organize_template: str = "{series_title}\\Season{season:02d}\\S{season:02d}E{episode:02d}.{series_title}.{ext}"
 
     # System
-    check_interval_seconds: int = 600
+    check_interval_seconds: int = 60
     rss_wait_interval_seconds: int = 6 * 60 * 60  # 6 hours between RSS retries
     discovery_cron: str = "0 0 * * 1"
     log_level: str = "INFO"
@@ -81,6 +97,9 @@ class Settings(BaseSettings):
     # Notifications
     apprise_urls: str = ""
 
+    # System detection (auto-populated on first run)
+    os_type: str = "auto"
+
     @property
     def filter_exclude_genres(self) -> list[str]:
         """Genres to exclude, parsed from comma-separated env string."""
@@ -94,7 +113,11 @@ class Settings(BaseSettings):
 
 @lru_cache
 def get_settings() -> Settings:
-    return Settings()
+    s = Settings()
+    if s.os_type == "auto":
+        detected = _detect_and_persist_os()
+        s.os_type = detected
+    return s
 
 
 settings = get_settings()

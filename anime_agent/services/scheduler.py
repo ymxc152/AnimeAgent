@@ -17,6 +17,7 @@ from anime_agent.memory.store import Store
 from anime_agent.services.discovery import DiscoveryService
 from anime_agent.services.episode_planner import EpisodePlanner
 from anime_agent.services.healthcheck import HealthCheck
+from anime_agent.services.qb_sync_service import QBSyncService
 
 
 class PreFlightHealthCheckError(RuntimeError):
@@ -110,6 +111,14 @@ class Scheduler:
         if session is None:
             async with self.session_factory() as session:
                 return await self.tick(session)
+
+        # Sync active qBittorrent progress first so the rest of the tick sees fresh state.
+        try:
+            sync_summary = await QBSyncService(session).sync()
+            if sync_summary.get("updated"):
+                logger.debug("Synced {} episodes from qBittorrent", sync_summary["updated"])
+        except Exception as exc:  # noqa: BLE001
+            logger.warning("qBittorrent sync failed during tick: {}", exc)
 
         store = Store(session)
         now = datetime.now(UTC)

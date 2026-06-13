@@ -40,6 +40,7 @@ export interface Episode {
   torrent_link: string | null
   torrent_status: string | null
   torrent_last_speed: number
+  torrent_progress: number
   torrent_added_at: string | null
   torrent_checked_at: string | null
   download_path: string | null

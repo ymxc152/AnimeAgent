@@ -51,6 +51,8 @@ class QBTool(BaseTool):
             return await self._get_status(client, qb_input)
         if qb_input.action == "delete":
             return await self._delete_torrent(client, qb_input)
+        if qb_input.action == "list":
+            return await self._list(client)
 
         return ToolOutput(success=False, error=f"Unknown action: {qb_input.action}")
 
@@ -135,6 +137,43 @@ class QBTool(BaseTool):
             return ToolOutput(success=False, error=f"Failed to delete torrent: {exc}")
 
         return ToolOutput(success=True, data={"deleted": True})
+
+    async def _list(self, client: Client) -> ToolOutput:
+        """List all torrents tagged with ``anime-agent`` from qBittorrent."""
+        try:
+            torrents = await asyncio.to_thread(client.torrents_info, tag="anime-agent")
+        except Exception as exc:  # noqa: BLE001
+            return ToolOutput(success=False, error=f"Failed to list torrents: {exc}")
+
+        now = datetime.now(UTC)
+        statuses = []
+        for torrent in torrents:
+            added_on = _get_value(torrent, "added_on")
+            added_at = _unix_to_utc(added_on) if added_on else now
+            dlspeed = _get_value(torrent, "dlspeed") or 0
+            last_activity = _get_value(torrent, "last_activity")
+            if dlspeed > 0:
+                last_speed_at = now
+            elif last_activity:
+                last_speed_at = _unix_to_utc(last_activity)
+            else:
+                last_speed_at = added_at
+
+            statuses.append(
+                {
+                    "hash": str(_get_value(torrent, "hash")).lower(),
+                    "name": _get_value(torrent, "name"),
+                    "progress": _get_value(torrent, "progress"),
+                    "state": _get_value(torrent, "state"),
+                    "download_speed": dlspeed,
+                    "size": _get_value(torrent, "size"),
+                    "save_path": _get_value(torrent, "save_path"),
+                    "content_path": _get_value(torrent, "content_path"),
+                    "added_at": added_at,
+                    "last_speed_at": last_speed_at,
+                }
+            )
+        return ToolOutput(success=True, data={"torrents": statuses})
 
 
 def _get_value(obj: Any, key: str) -> Any:

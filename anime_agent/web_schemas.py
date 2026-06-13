@@ -190,6 +190,7 @@ class EpisodeResponse(BaseModel):
     torrent_link: str | None
     torrent_status: str | None
     torrent_last_speed: float
+    torrent_progress: float = 0.0
     torrent_added_at: datetime | None
     torrent_checked_at: datetime | None
     download_path: str | None
