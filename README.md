@@ -196,12 +196,17 @@ anime-agent/
 
 ---
 
-## ⚠️ 已知问题
+## ✅ 持续集成
 
-- **pytest**：`247 selected, 243 passed, 4 failed → 已修复为全绿`（`match_torrent` 低置信度/人工审批逻辑已修复；`test_web/test_frontend.py` 在 `frontend/dist` 不存在时跳过）。
-- **Ruff**：27 个错误 → 已修复。
-- **MyPy**：10 个错误 → 已修复。
-- 完整 Bug 清单与修复优先级见 [`docs/ARCHITECTURE_AND_PLAN.md`](./docs/ARCHITECTURE_AND_PLAN.md)。
+每次提交到 `main` 分支都会触发 GitHub Actions：
+
+- `ruff check anime_agent tests`
+- `mypy anime_agent`
+- `pytest`
+
+当前 CI 状态：[![CI](https://github.com/ymxc152/AnimeAgent/actions/workflows/ci.yml/badge.svg)](https://github.com/ymxc152/AnimeAgent/actions/workflows/ci.yml)
+
+> 本地最新结果：`263 selected, 262 passed, 1 skipped`（`test_web/test_frontend.py` 在 `frontend/dist` 未构建时跳过）。
 
 ## 🤝 贡献
 

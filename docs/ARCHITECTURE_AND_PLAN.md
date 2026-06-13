@@ -29,12 +29,10 @@
 
 ### 测试现状
 
-- **pytest**：`262 passed, 1 skipped, 14 deselected`（含新增 `reflect_match` 单元测试；`test_web/test_frontend.py` 在 `frontend/dist` 不存在时跳过）。
-- **Ruff**：27 个错误 → 已修复。
-- **MyPy**：10 个错误 → 已修复。
-- **Ruff**：27 个 lint 错误，主要在测试文件（重复导入、未使用变量等）。
-- **MyPy**：10 个类型错误，集中在 `animes_garden_tool.py` 签名、`llm_tool.py` 正则、`web.py` SQLAlchemy Column 类型传递、`runner.py` 状态赋值。
-- 这些错误会导致 CI 无法通过，建议优先修复。
+- **pytest**：`262 passed, 1 skipped, 14 deselected`（`test_web/test_frontend.py` 在 `frontend/dist` 不存在时跳过）。
+- **Ruff**：通过，无 lint 错误。
+- **MyPy**：通过，无类型错误。
+- CI 当前为绿色。
 
 ### 明显 Bug 与代码问题
 
@@ -100,7 +98,7 @@
 | 三层 LangGraph（对话/调度/Episode） | 仅 Episode Graph 实现；对话层、调度层 LangGraph 未实现。 |
 | Bangumi 优先 | 当前 AniList 优先；Bangumi 仅 fallback。 |
 | 按播出周几智能调度 | 未实现播出时间门控；每 tick 扫描所有活跃 Episode。 |
-| 人工断点 | 状态与 API 存在，但 `match_torrent` 未触发 human_review。 |
+| 人工断点 | `match_torrent` 已实现低置信度计数，`reflect_match` 节点在多次低置信度后路由到 `human_review`；状态与 API 可用。 |
 | `process_metadata` 节点 | 未实现； organize_files 直接整理。 |
 | 通知用户节点 | 未实现。 |
 | 对话查询统计 | 未实现。 |
