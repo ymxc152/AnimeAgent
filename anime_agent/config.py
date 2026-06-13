@@ -45,6 +45,7 @@ class Settings(BaseSettings):
 
     # System
     check_interval_seconds: int = 600
+    rss_wait_interval_seconds: int = 6 * 60 * 60  # 6 hours between RSS retries
     discovery_cron: str = "0 0 * * 1"
     log_level: str = "INFO"
     database_url: str = "sqlite+aiosqlite:///anime_agent.db"
