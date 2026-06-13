@@ -11,6 +11,7 @@ from anime_agent.agents.episode.nodes.human_review import HumanReviewNode
 from anime_agent.agents.episode.nodes.match_torrent import MatchTorrentNode
 from anime_agent.agents.episode.nodes.organize_files import OrganizeFilesNode
 from anime_agent.agents.episode.nodes.poll_download import PollDownloadNode
+from anime_agent.agents.episode.nodes.reflect_match import ReflectMatchNode
 from anime_agent.agents.episode.nodes.refresh_emby import RefreshEmbyNode
 from anime_agent.agents.episode.nodes.schedule_resume import ScheduleResumeNode
 from anime_agent.agents.episode.nodes.search_resources import SearchResourcesNode
@@ -47,7 +48,20 @@ def _after_match_torrent(state: EpisodeAgentState) -> str:
         return "send_download"
     if status == "search_resources":
         return "search_resources"
-    if status in ("waiting_for_rss", "no_match", "low_confidence"):
+    if status in ("waiting_for_rss", "no_match"):
+        return "schedule_resume"
+    if status == "low_confidence":
+        return "reflect_match"
+    return "handle_error"
+
+
+def _after_reflect_match(state: EpisodeAgentState) -> str:
+    status = state.get("status")
+    if status == "matched":
+        return "send_download"
+    if status == "search_resources":
+        return "search_resources"
+    if status == "schedule_resume":
         return "schedule_resume"
     if status == "human_review":
         return "human_review"
@@ -123,6 +137,7 @@ def build_episode_graph(**node_overrides: Any) -> CompiledStateGraph:
     builder.add_node("organize_files", node_overrides.get("organize_files", OrganizeFilesNode()))
     builder.add_node("refresh_emby", node_overrides.get("refresh_emby", RefreshEmbyNode()))
     builder.add_node("human_review", node_overrides.get("human_review", HumanReviewNode()))
+    builder.add_node("reflect_match", node_overrides.get("reflect_match", ReflectMatchNode()))
     builder.add_node("schedule_resume", node_overrides.get("schedule_resume", ScheduleResumeNode()))
     builder.add_node("handle_error", node_overrides.get("handle_error", HandleErrorNode()))
 
@@ -130,6 +145,7 @@ def build_episode_graph(**node_overrides: Any) -> CompiledStateGraph:
 
     builder.add_conditional_edges("fetch_rss", _after_fetch_rss)
     builder.add_conditional_edges("match_torrent", _after_match_torrent)
+    builder.add_conditional_edges("reflect_match", _after_reflect_match)
     builder.add_conditional_edges("search_resources", _after_search_resources)
     builder.add_conditional_edges("send_download", _after_send_download)
     builder.add_conditional_edges("poll_download", _after_poll_download)

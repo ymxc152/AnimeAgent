@@ -174,8 +174,8 @@ class TestMatchTorrentNodeStatus:
 
         assert result["status"] == "no_match"
 
-    async def test_match_torrent_returns_human_review_on_low_confidence(self, base_state):
-        """MatchTorrentNode should return status='human_review' after max low confidence attempts."""
+    async def test_match_torrent_returns_low_confidence_for_reflection(self, base_state):
+        """MatchTorrentNode should return status='low_confidence' so reflection can decide."""
         base_state["torrent_candidates"] = [
             {"info_hash": "abc123", "title": "[Sub] Frieren - 01 [1080p].mkv", "link": "magnet:?xt=urn:btih:abc123"},
         ]
@@ -196,8 +196,8 @@ class TestMatchTorrentNodeStatus:
         node = MatchTorrentNode(selector=mock_selector)
         result = await node(base_state)
 
-        assert result["status"] == "human_review"
-        assert result["requires_human"] is True
+        assert result["status"] == "low_confidence"
+        assert result["low_confidence_count"] == 3
 
 
 class TestSendDownloadNodeStatus:

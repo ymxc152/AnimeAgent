@@ -6,7 +6,7 @@ from typing import Any
 import pytest
 import respx
 from httpx import Response
-from sqlalchemy.ext.asyncio import AsyncSession
+from sqlalchemy.ext.asyncio import AsyncSession, async_sessionmaker
 
 from anime_agent.agents.episode.graph import build_episode_graph
 from anime_agent.agents.episode.nodes.fetch_rss import FetchRSSNode
@@ -18,10 +18,8 @@ from anime_agent.agents.episode.nodes.send_download import SendDownloadNode
 from anime_agent.agents.episode.runner import EpisodeGraphRunner
 from anime_agent.memory.models import Episode, RSSSource, Subscription
 from anime_agent.memory.store import Store
-from anime_agent.services.torrent_selector import TorrentSelector
 from anime_agent.tools.base import ToolOutput
 from anime_agent.tools.rss_tool import RSSTool
-from sqlalchemy.ext.asyncio import async_sessionmaker
 from tests.fakes import FakeEmbyTool, FakeFileSystemTool, FakeQBTool
 
 

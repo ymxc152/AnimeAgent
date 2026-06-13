@@ -61,8 +61,8 @@ async def test_match_torrent_increments_low_confidence():
     assert result["status"] == "low_confidence"
 
 
-async def test_match_torrent_triggers_human_review_after_three_low_confidence():
-    """match_torrent should set requires_human after 3 low confidence attempts."""
+async def test_match_torrent_keeps_low_confidence_after_max_attempts():
+    """match_torrent should keep status low_confidence; reflection decides escalation."""
     selector = AsyncMock()
     selector.select.return_value = ToolOutput(
         success=True,
@@ -76,8 +76,8 @@ async def test_match_torrent_triggers_human_review_after_three_low_confidence():
     node = MatchTorrentNode(selector=selector)
     result = await node(_state(low_confidence_count=2, candidates=[{"title": "test", "info_hash": "abc1"}]))
 
-    assert result["requires_human"] is True
-    assert result["status"] == "human_review"
+    assert result["status"] == "low_confidence"
+    assert result["low_confidence_count"] == 3
 
 
 async def test_match_torrent_returns_no_match():

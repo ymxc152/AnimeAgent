@@ -110,28 +110,14 @@ class MatchTorrentNode:
                 "low_confidence_count": 0,
             }
 
-        # Medium confidence -> accumulate attempts and eventually ask a human.
+        # Medium confidence -> let the reflection node decide before bothering a human.
         low_confidence_count = state.get("low_confidence_count", 0) + 1
         logger.info(
-            "Low confidence ({:.2f}) for episode {} (attempt {}/{})",
+            "Low confidence ({:.2f}) for episode {} (attempt {})",
             confidence,
             state.get("episode_number"),
             low_confidence_count,
-            self.MAX_LOW_CONFIDENCE_ATTEMPTS,
         )
-
-        if low_confidence_count >= self.MAX_LOW_CONFIDENCE_ATTEMPTS:
-            return {
-                "matched_torrent": {
-                    "info_hash": data.get("info_hash"),
-                    "title": data.get("title"),
-                    "link": data.get("link"),
-                    "confidence": confidence,
-                },
-                "status": "human_review",
-                "requires_human": True,
-                "low_confidence_count": low_confidence_count,
-            }
 
         return {
             "matched_torrent": None,
