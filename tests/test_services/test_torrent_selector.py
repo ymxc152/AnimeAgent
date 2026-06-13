@@ -47,6 +47,35 @@ async def test_selector_prefilters_by_episode_number():
     assert "[Sub] Anime - 10 [1080p].mkv" not in titles
 
 
+async def test_selector_prefilters_keeps_versioned_releases():
+    """Selector should keep versioned releases like 01v2 / EP01v2."""
+    candidates = [
+        _candidate("[Sub] Anime - 01v2 [1080p].mkv", "abc1v2"),
+        _candidate("[Sub] Anime - 01 [1080p].mkv", "abc1"),
+        _candidate("[Sub] Anime EP02v2 [1080p].mkv", "abc2"),
+    ]
+
+    llm_tool = AsyncMock()
+    llm_tool.invoke.return_value = ToolOutput(
+        success=True, data={"json": {"info_hash": "abc1v2", "confidence": 0.95}}
+    )
+
+    selector = TorrentSelector(llm_tool=llm_tool)
+    result = await selector.select(
+        candidates=candidates,
+        episode_number=1,
+        title_variants=["Anime"],
+        failed_hashes=[],
+    )
+
+    assert result.success is True
+    passed = result.data.get("prefiltered", [])
+    titles = {c["title"] for c in passed}
+    assert "[Sub] Anime - 01v2 [1080p].mkv" in titles
+    assert "[Sub] Anime - 01 [1080p].mkv" in titles
+    assert "[Sub] Anime EP02v2 [1080p].mkv" not in titles
+
+
 async def test_selector_returns_llm_match():
     """Selector should return the LLM-chosen candidate with confidence."""
     candidates = [

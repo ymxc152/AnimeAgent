@@ -126,12 +126,12 @@ class TorrentSelector:
         """
         ep = episode_number
         patterns = [
-            # Explicit prefix: EP12, ep12
-            rf"(?:EP|ep)0?{ep}(?:[\]\)\s.\-|]|$)",
-            # Standalone or bracketed: [12], (12), space+12, - 12
+            # Explicit prefix: EP12, ep12; also allow version suffixes: EP01v2
+            rf"(?:EP|ep)0?{ep}(?:[\]\)\s.\-|v]|$)",
+            # Standalone or bracketed: [12], (12), space+12, - 12; allow 01v2
             # Negative lookbehind: not preceded by a digit (rejects "01-12" range)
             # Negative lookahead: episode not followed by range markers like -digit or ~digit
-            rf"(?<!\d)[\[\(\s]-?\s*0?{ep}(?![~-]\d)(?:[\]\)\s.\-|]|$)",
+            rf"(?<!\d)[\[\(\s]-?\s*0?{ep}(?![~-]\d)(?:[\]\)\s.\-|v]|$)",
             # CJK markers
             rf"第0?{ep}[集话話]",
         ]
