@@ -29,7 +29,7 @@ class FetchRSSNode:
             state.get("subscription_id"),
         )
 
-        sources = await self._get_active_sources()
+        sources = await self._get_active_sources(state.get("rss_source_id"))
         if not sources:
             logger.error("No active RSS sources found")
             return {
@@ -85,11 +85,23 @@ class FetchRSSNode:
 
         return {"torrent_candidates": merged, "status": "fetching"}
 
-    async def _get_active_sources(self) -> list[Any]:
-        """Load active RSS sources from the database."""
+    async def _get_active_sources(self, rss_source_id: int | None = None) -> list[Any]:
+        """Load active RSS sources from the database.
+
+        If ``rss_source_id`` is provided, prefer that specific source while still
+        falling back to all active sources when it is missing or inactive.
+        """
         if self.session_factory is None:
             logger.error("No session_factory configured for FetchRSSNode")
             return []
         async with self.session_factory() as session:
             store = Store(session)
+            if rss_source_id is not None:
+                source = await store.rss_sources.get_by_id(rss_source_id)
+                if source is not None and source.is_active:
+                    return [source]
+                logger.warning(
+                    "Requested RSS source {} not found or inactive; falling back to all active sources",
+                    rss_source_id,
+                )
             return await store.rss_sources.list_active()

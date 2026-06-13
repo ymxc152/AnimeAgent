@@ -21,10 +21,12 @@ def _state(rss_source_id: int | None = 1) -> dict:
     }
 
 
-def _make_mock_source(url: str = "https://example.com/rss", name: str = "test"):
+def _make_mock_source(url: str = "https://example.com/rss", name: str = "test", source_id: int = 1):
     source = MagicMock()
+    source.id = source_id
     source.url = url
     source.name = name
+    source.is_active = True
     return source
 
 
@@ -41,7 +43,16 @@ def mock_store():
 
 def _make_node(mock_store, rss_tool=None, sources=None):
     """Create a FetchRSSNode with mocked session_factory."""
-    mock_store.rss_sources.list_active = AsyncMock(return_value=sources or [])
+    sources = sources or []
+    mock_store.rss_sources.list_active = AsyncMock(return_value=sources)
+
+    async def _get_by_id(source_id: int):
+        for source in sources:
+            if getattr(source, "id", None) == source_id:
+                return source
+        return None
+
+    mock_store.rss_sources.get_by_id = AsyncMock(side_effect=_get_by_id)
 
     mock_session = AsyncMock()
 
@@ -125,3 +136,42 @@ async def test_fetch_rss_returns_failed_when_no_session_factory():
 
     assert result["status"] == "failed"
     assert "errors" in result
+
+
+async def test_fetch_rss_uses_specific_rss_source(mock_store):
+    """fetch_rss should prefer the subscription's rss_source_id."""
+    rss_tool = AsyncMock()
+    rss_tool.invoke.return_value = ToolOutput(
+        success=True,
+        data={"entries": [{"title": "[Sub] Anime - 01 [1080p].mkv", "info_hash": "abc1"}]},
+    )
+
+    preferred = _make_mock_source(url="https://preferred.com/rss", name="preferred", source_id=1)
+    other = _make_mock_source(url="https://other.com/rss", name="other", source_id=2)
+    node = _make_node(mock_store, rss_tool=rss_tool, sources=[preferred, other])
+    result = await node(_state(rss_source_id=1))
+
+    assert result["status"] == "fetching"
+    assert len(result["torrent_candidates"]) == 1
+    rss_tool.invoke.assert_called_once()
+    call_url = rss_tool.invoke.call_args[0][0].url
+    assert call_url == "https://preferred.com/rss"
+
+
+async def test_fetch_rss_falls_back_when_source_inactive(mock_store):
+    """fetch_rss should fall back to all active sources if the requested one is inactive."""
+    rss_tool = AsyncMock()
+    rss_tool.invoke.return_value = ToolOutput(
+        success=True,
+        data={"entries": [{"title": "[Sub] Anime - 01 [1080p].mkv", "info_hash": "abc1"}]},
+    )
+
+    inactive = _make_mock_source(url="https://inactive.com/rss", name="inactive", source_id=1)
+    inactive.is_active = False
+    fallback = _make_mock_source(url="https://fallback.com/rss", name="fallback", source_id=2)
+    node = _make_node(mock_store, rss_tool=rss_tool, sources=[inactive, fallback])
+    result = await node(_state(rss_source_id=1))
+
+    assert result["status"] == "fetching"
+    call_url = rss_tool.invoke.call_args[0][0].url
+    assert call_url == "https://fallback.com/rss"
