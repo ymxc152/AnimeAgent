@@ -7,8 +7,8 @@ import pytest
 from anime_agent.agents.episode.graph import build_episode_graph
 from anime_agent.agents.episode.nodes.fetch_rss import FetchRSSNode
 from anime_agent.agents.episode.nodes.match_torrent import MatchTorrentNode
-from anime_agent.agents.episode.nodes.send_download import SendDownloadNode
 from anime_agent.agents.episode.nodes.poll_download import PollDownloadNode
+from anime_agent.agents.episode.nodes.send_download import SendDownloadNode
 from anime_agent.agents.episode.state import EpisodeAgentState
 
 

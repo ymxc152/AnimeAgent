@@ -1,8 +1,7 @@
 """Tests for tool registry."""
 
-import pytest
 
-from anime_agent.tools import get_all_tools, AnimeGardenTool
+from anime_agent.tools import AnimeGardenTool, get_all_tools
 
 
 class TestToolRegistry:
@@ -42,5 +41,4 @@ class TestToolRegistry:
 
     def test_animes_garden_tool_import(self):
         """Should be able to import AnimeGardenTool directly."""
-        from anime_agent.tools import AnimeGardenTool
         assert AnimeGardenTool is not None

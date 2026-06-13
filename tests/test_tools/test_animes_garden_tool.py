@@ -1,16 +1,15 @@
 """Tests for AnimeGardenTool."""
 
-from unittest.mock import AsyncMock, MagicMock, patch
-from datetime import datetime, timezone
+from unittest.mock import MagicMock, patch
 
-import pytest
 import httpx
+import pytest
 
 from anime_agent.tools.animes_garden_tool import (
     AnimeGardenTool,
     AnimeGardenToolInput,
-    _extract_info_hash,
     _convert_size_kb_to_bytes,
+    _extract_info_hash,
 )
 
 

@@ -1,6 +1,5 @@
 """Tests for database models."""
 
-import pytest
 
 from anime_agent.memory.models import Episode, Subscription
 

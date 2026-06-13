@@ -1,8 +1,6 @@
 """Tests for search_resources node."""
 
-from unittest.mock import AsyncMock, MagicMock
-
-import pytest
+from unittest.mock import AsyncMock
 
 from anime_agent.agents.episode.nodes.search_resources import SearchResourcesNode
 from anime_agent.tools.base import ToolOutput

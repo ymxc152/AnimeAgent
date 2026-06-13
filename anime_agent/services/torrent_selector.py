@@ -130,10 +130,7 @@ class TorrentSelector:
             # CJK markers
             rf"第0?{ep}[集话話]",
         ]
-        for pattern in patterns:
-            if re.search(pattern, title):
-                return True
-        return False
+        return any(re.search(pattern, title) for pattern in patterns)
 
     # ------------------------------------------------------------------
     # Heuristic fallback (no LLM)

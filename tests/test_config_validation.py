@@ -1,8 +1,6 @@
 """Tests for configuration validation."""
 
 import os
-import pytest
-from pydantic import ValidationError
 from unittest.mock import patch
 
 from anime_agent.config import Settings

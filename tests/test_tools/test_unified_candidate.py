@@ -1,12 +1,12 @@
 """Tests for unified candidate format between RSSTool and AnimeGardenTool."""
 
-from unittest.mock import AsyncMock, MagicMock, patch
 from types import SimpleNamespace
+from unittest.mock import MagicMock, patch
 
 import pytest
 
-from anime_agent.tools.rss_tool import RSSTool, RSSToolInput, _normalize_entry
 from anime_agent.tools.animes_garden_tool import AnimeGardenTool, AnimeGardenToolInput
+from anime_agent.tools.rss_tool import _normalize_entry
 
 
 class TestRSSToolCandidateFormat:

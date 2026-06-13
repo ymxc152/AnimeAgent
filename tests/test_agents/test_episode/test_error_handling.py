@@ -6,10 +6,8 @@ import pytest
 
 from anime_agent.agents.episode.nodes.fetch_rss import FetchRSSNode
 from anime_agent.agents.episode.nodes.match_torrent import MatchTorrentNode
-from anime_agent.agents.episode.nodes.send_download import SendDownloadNode
 from anime_agent.agents.episode.nodes.poll_download import PollDownloadNode
-from anime_agent.agents.episode.nodes.organize_files import OrganizeFilesNode
-from anime_agent.agents.episode.nodes.refresh_emby import RefreshEmbyNode
+from anime_agent.agents.episode.nodes.send_download import SendDownloadNode
 
 
 @pytest.fixture
