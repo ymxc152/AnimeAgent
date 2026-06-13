@@ -18,7 +18,10 @@ from anime_agent.agents.episode.nodes.send_download import SendDownloadNode
 from anime_agent.agents.episode.runner import EpisodeGraphRunner
 from anime_agent.memory.models import Episode, RSSSource, Subscription
 from anime_agent.memory.store import Store
+from anime_agent.services.torrent_selector import TorrentSelector
+from anime_agent.tools.base import ToolOutput
 from anime_agent.tools.rss_tool import RSSTool
+from sqlalchemy.ext.asyncio import async_sessionmaker
 from tests.fakes import FakeEmbyTool, FakeFileSystemTool, FakeQBTool
 
 
@@ -77,24 +80,41 @@ async def test_episode_pipeline_with_real_rss_fixture(
     fake_emby = FakeEmbyTool()
     fake_fs = FakeFileSystemTool(library_path=str(tmp_path / "library"))
 
-    def rss_url_resolver(rss_source_id: int) -> str | None:
-        return "https://api.animes.garden/feed.xml"
-
     class HighConfidenceMatchTorrentNode(MatchTorrentNode):
-        async def __call__(self, state: dict[str, Any]) -> dict[str, Any]:
-            result = await super().__call__(state)
-            if result.get("status") in ("matched", "low_confidence", "human_review"):
-                matched = result.get("matched_torrent")
-                if matched:
-                    return {
-                        "matched_torrent": matched,
-                        "status": "matched",
-                        "low_confidence_count": 0,
-                    }
-            return result
+        def __init__(self) -> None:
+            # Use a fake selector to avoid requiring a real LLM API key.
+            self.selector = _FakeSelector()
+
+    class _FakeSelector:
+        async def select(
+            self,
+            candidates: list[dict[str, Any]],
+            episode_number: int,
+            title_variants: list[str],
+            failed_hashes: list[str],
+        ) -> ToolOutput:
+            for candidate in candidates:
+                if candidate.get("info_hash") and candidate.get("info_hash") not in failed_hashes:
+                    return ToolOutput(
+                        success=True,
+                        data={
+                            "matched": True,
+                            "info_hash": candidate["info_hash"],
+                            "title": candidate.get("title", ""),
+                            "link": candidate.get("link", ""),
+                            "confidence": 0.95,
+                        },
+                    )
+            return ToolOutput(success=True, data={"matched": False})
+
+    # Use a real session factory so FetchRSSNode can open/close its own sessions
+    # without closing the test fixture's db_session.
+    session_factory = async_sessionmaker(
+        bind=db_session.bind, expire_on_commit=False
+    )
 
     graph = build_episode_graph(
-        fetch_rss=FetchRSSNode(rss_tool=RSSTool(), rss_url_resolver=rss_url_resolver),
+        fetch_rss=FetchRSSNode(rss_tool=RSSTool(), session_factory=session_factory),
         match_torrent=HighConfidenceMatchTorrentNode(),
         send_download=SendDownloadNode(qb_tool=fake_qb),
         poll_download=PollDownloadNode(qb_tool=fake_qb),
