@@ -2,8 +2,11 @@ import { useCallback, useEffect, useState } from 'react'
 import { listEpisodes, listSubscriptions, retryEpisode, submitHumanInput } from '../api/client'
 import type { Episode, Subscription } from '../types'
 import { useI18n } from '../i18n/useI18n'
+import { usePolling } from '../hooks/usePolling'
 import { Card, Button, Input, Select, Badge, Loading, EmptyState } from '../components/ui'
 import { PlayCircle, RefreshCw, CheckCircle2, XCircle, AlertTriangle } from 'lucide-react'
+
+const POLL_INTERVAL = 5000
 
 const STATUS_BADGE_VARIANT: Record<string, 'success' | 'danger' | 'warning' | 'info' | 'primary' | 'muted'> = {
   pending: 'muted',
@@ -54,6 +57,8 @@ export function Episodes() {
 
   // eslint-disable-next-line react-hooks/set-state-in-effect -- initial data load
   useEffect(() => { void load() }, [load])
+
+  usePolling(load, POLL_INTERVAL)
 
   async function handleRetry(id: number) {
     try {

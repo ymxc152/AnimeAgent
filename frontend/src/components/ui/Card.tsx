@@ -5,9 +5,10 @@ interface CardProps {
   className?: string
   padding?: 'none' | 'sm' | 'md' | 'lg'
   hover?: boolean
+  onClick?: () => void
 }
 
-export function Card({ children, className = '', padding = 'md', hover = false }: CardProps) {
+export function Card({ children, className = '', padding = 'md', hover = false, onClick }: CardProps) {
   const paddings = {
     none: '',
     sm: 'p-4',
@@ -17,6 +18,7 @@ export function Card({ children, className = '', padding = 'md', hover = false }
 
   return (
     <div
+      onClick={onClick}
       className={`
         rounded-2xl border border-slate-200/60 bg-white/80 backdrop-blur-xl
         dark:border-slate-700/60 dark:bg-slate-900/80
@@ -35,9 +37,10 @@ interface StatCardProps {
   value: number | string
   icon: ReactNode
   color?: 'violet' | 'indigo' | 'emerald' | 'rose' | 'amber' | 'sky'
+  onClick?: () => void
 }
 
-export function StatCard({ label, value, icon, color = 'indigo' }: StatCardProps) {
+export function StatCard({ label, value, icon, color = 'indigo', onClick }: StatCardProps) {
   const gradients: Record<string, string> = {
     violet: 'from-violet-500 to-purple-600',
     indigo: 'from-indigo-500 to-blue-600',
@@ -47,8 +50,14 @@ export function StatCard({ label, value, icon, color = 'indigo' }: StatCardProps
     sky: 'from-sky-500 to-cyan-600',
   }
 
+  const isClickable = !!onClick
+
   return (
-    <Card className="relative overflow-hidden">
+    <Card
+      className={`relative overflow-hidden ${isClickable ? 'cursor-pointer' : ''}`}
+      hover={isClickable}
+      onClick={onClick}
+    >
       <div className="flex items-start justify-between">
         <div>
           <p className="text-sm font-medium text-slate-500 dark:text-slate-400">{label}</p>

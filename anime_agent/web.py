@@ -175,22 +175,26 @@ async def stats(db: AsyncSession = Depends(get_db)) -> dict[str, Any]:
 
 @app.get("/api/subscriptions")
 async def list_subscriptions(db: AsyncSession = Depends(get_db)) -> list[dict[str, Any]]:
-    """Return all subscriptions with episode progress stats."""
-    result = await db.execute(select(Subscription).order_by(Subscription.created_at))
-    subscriptions = list(result.scalars().all())
+    """Return all subscriptions with episode progress stats in a single query."""
+    downloaded_statuses = ("completed", "organized", "organized_with_warnings")
+    stmt = (
+        select(
+            Subscription,
+            func.count(Episode.id).label("ep_total"),
+            func.count(Episode.id).filter(Episode.status == "completed").label("ep_completed"),
+            func.count(Episode.id).filter(Episode.status.in_(downloaded_statuses)).label("ep_downloaded"),
+            func.count(Episode.id).filter(Episode.status == "failed").label("ep_failed"),
+            func.count(Episode.id).filter(Episode.status == "pending").label("ep_pending"),
+        )
+        .outerjoin(Episode, Subscription.id == Episode.subscription_id)
+        .group_by(Subscription.id)
+        .order_by(Subscription.created_at)
+    )
+    result = await db.execute(stmt)
 
     output: list[dict[str, Any]] = []
-    for sub in subscriptions:
-        ep_result = await db.execute(
-            select(Episode).where(Episode.subscription_id == sub.id)
-        )
-        episodes = list(ep_result.scalars().all())
-        total = len(episodes)
-        completed = sum(1 for ep in episodes if ep.status == "completed")
-        downloaded = sum(1 for ep in episodes if ep.status in ("completed", "organized", "organized_with_warnings"))
-        failed = sum(1 for ep in episodes if ep.status == "failed")
-        pending = sum(1 for ep in episodes if ep.status == "pending")
-
+    for row in result.all():
+        sub = row[0]
         sub_dict = {
             "id": sub.id,
             "bangumi_id": sub.bangumi_id,
@@ -210,11 +214,11 @@ async def list_subscriptions(db: AsyncSession = Depends(get_db)) -> list[dict[st
             "airing_timezone": sub.airing_timezone,
             "created_at": sub.created_at.isoformat() if sub.created_at else None,
             "rss_source_id": sub.rss_source_id,
-            "ep_total": total,
-            "ep_completed": completed,
-            "ep_downloaded": downloaded,
-            "ep_failed": failed,
-            "ep_pending": pending,
+            "ep_total": row.ep_total or 0,
+            "ep_completed": row.ep_completed or 0,
+            "ep_downloaded": row.ep_downloaded or 0,
+            "ep_failed": row.ep_failed or 0,
+            "ep_pending": row.ep_pending or 0,
         }
         output.append(sub_dict)
 

@@ -8,8 +8,17 @@ import {
 } from '../api/client'
 import type { Subscription, SubscriptionCreateRequest } from '../types'
 import { useI18n } from '../i18n/useI18n'
+import { usePolling } from '../hooks/usePolling'
 import { Card, Button, Input, Switch, Badge, Loading, EmptyState } from '../components/ui'
 import { Plus, Trash2, ListVideo, RefreshCw } from 'lucide-react'
+
+const POLL_INTERVAL = 5000
+
+const SUBSCRIPTION_STATUS_VARIANT: Record<string, 'primary' | 'success' | 'muted'> = {
+  ongoing: 'primary',
+  completed: 'success',
+  dropped: 'muted',
+}
 
 export function Subscriptions() {
   const { t } = useI18n()
@@ -40,6 +49,8 @@ export function Subscriptions() {
 
   // eslint-disable-next-line react-hooks/set-state-in-effect -- initial data load
   useEffect(() => { void load() }, [load])
+
+  usePolling(load, POLL_INTERVAL)
 
   async function handleSubmit(e: React.FormEvent) {
     e.preventDefault()
@@ -161,8 +172,8 @@ export function Subscriptions() {
                       <h3 className="truncate text-base font-semibold text-slate-900 dark:text-white">
                         {sub.title_chinese || sub.title_native || sub.title_romaji}
                       </h3>
-                      <Badge variant={sub.status === 'ongoing' ? 'primary' : sub.status === 'completed' ? 'success' : 'muted'}>
-                        {sub.status}
+                      <Badge variant={SUBSCRIPTION_STATUS_VARIANT[sub.status] || 'muted'}>
+                        {t.subscriptions.statuses[sub.status as keyof typeof t.subscriptions.statuses] || sub.status}
                       </Badge>
                     </div>
                     {(sub.title_native || sub.title_romaji) && (sub.title_chinese || sub.title_native) && (

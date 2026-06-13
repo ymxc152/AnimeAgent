@@ -1,8 +1,10 @@
-import { useEffect, useState } from 'react'
+import { useCallback, useEffect, useState } from 'react'
+import { useNavigate } from 'react-router-dom'
 import { getStats, getToolsHealth } from '../api/client'
 import type { Stats, ToolHealth } from '../types'
 import { useI18n } from '../i18n/useI18n'
-import { Card, StatCard, Badge, Loading, EmptyState } from '../components/ui'
+import { usePolling } from '../hooks/usePolling'
+import { Card, StatCard, Badge, Loading, EmptyState, Button } from '../components/ui'
 import {
   ListVideo,
   PlayCircle,
@@ -11,29 +13,49 @@ import {
   AlertTriangle,
   Activity,
   HeartPulse,
+  RefreshCw,
 } from 'lucide-react'
+
+const POLL_INTERVAL = 5000
 
 export function Dashboard() {
   const { t } = useI18n()
+  const navigate = useNavigate()
   const [stats, setStats] = useState<Stats | null>(null)
   const [health, setHealth] = useState<Record<string, ToolHealth> | null>(null)
+  const [healthLoading, setHealthLoading] = useState(false)
+  const [lastChecked, setLastChecked] = useState<Date | null>(null)
   const [error, setError] = useState<string | null>(null)
 
-  useEffect(() => {
-    let cancelled = false
-    ;(async () => {
-      try {
-        const [statsData, healthData] = await Promise.all([getStats(), getToolsHealth()])
-        if (!cancelled) {
-          setStats(statsData)
-          setHealth(healthData)
-        }
-      } catch (err) {
-        if (!cancelled) setError(err instanceof Error ? err.message : 'Failed to load dashboard')
-      }
-    })()
-    return () => { cancelled = true }
+  const loadStats = useCallback(async () => {
+    try {
+      const statsData = await getStats()
+      setStats(statsData)
+      setError(null)
+    } catch (err) {
+      setError(err instanceof Error ? err.message : 'Failed to load stats')
+    }
   }, [])
+
+  const loadHealth = useCallback(async () => {
+    setHealthLoading(true)
+    try {
+      const healthData = await getToolsHealth()
+      setHealth(healthData)
+      setLastChecked(new Date())
+    } finally {
+      setHealthLoading(false)
+    }
+  }, [])
+
+  useEffect(() => {
+    void (async () => {
+      await loadStats()
+      await loadHealth()
+    })()
+  }, [loadStats, loadHealth])
+
+  usePolling(loadStats, POLL_INTERVAL)
 
   if (error) {
     return (
@@ -71,18 +93,21 @@ export function Dashboard() {
           value={stats.subscriptions.total}
           icon={<ListVideo className="h-6 w-6" />}
           color="indigo"
+          onClick={() => navigate('/subscriptions')}
         />
         <StatCard
           label={t.dashboard.stats.ongoing}
           value={stats.subscriptions.ongoing}
           icon={<Clock className="h-6 w-6" />}
           color="amber"
+          onClick={() => navigate('/subscriptions')}
         />
         <StatCard
           label={t.dashboard.stats.completed}
           value={stats.subscriptions.completed}
           icon={<CheckCircle2 className="h-6 w-6" />}
           color="emerald"
+          onClick={() => navigate('/subscriptions')}
         />
       </div>
 
@@ -93,18 +118,21 @@ export function Dashboard() {
           value={stats.episodes.pending}
           icon={<PlayCircle className="h-6 w-6" />}
           color="sky"
+          onClick={() => navigate('/episodes')}
         />
         <StatCard
           label={t.dashboard.stats.completed}
           value={stats.episodes.completed}
           icon={<CheckCircle2 className="h-6 w-6" />}
           color="emerald"
+          onClick={() => navigate('/episodes')}
         />
         <StatCard
           label={t.dashboard.stats.failed}
           value={stats.episodes.failed}
           icon={<AlertTriangle className="h-6 w-6" />}
           color="rose"
+          onClick={() => navigate('/episodes?status=failed')}
         />
       </div>
 
@@ -118,7 +146,22 @@ export function Dashboard() {
           <Badge variant={healthyCount === healthEntries.length ? 'success' : 'warning'}>
             {healthyCount}/{healthEntries.length}
           </Badge>
+          <Button
+            variant="secondary"
+            size="sm"
+            isLoading={healthLoading}
+            onClick={loadHealth}
+            className="ml-auto"
+          >
+            <RefreshCw className="h-3.5 w-3.5" />
+            {t.dashboard.refreshHealth}
+          </Button>
         </div>
+        {lastChecked && (
+          <p className="mb-3 text-xs text-slate-500 dark:text-slate-400">
+            {t.dashboard.lastChecked}: {lastChecked.toLocaleTimeString()}
+          </p>
+        )}
 
         <Card padding="none">
           <div className="divide-y divide-slate-100 dark:divide-slate-800">

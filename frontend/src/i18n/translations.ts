@@ -53,6 +53,8 @@ export const translations = {
       toolHealth: '服务健康状态',
       healthy: '正常',
       unhealthy: '异常',
+      refreshHealth: '重新检测',
+      lastChecked: '上次检测',
     },
     subscriptions: {
       title: '订阅管理',
@@ -68,6 +70,11 @@ export const translations = {
         autoDownload: '自动下载',
       },
       noSubscriptions: '还没有订阅',
+      statuses: {
+        ongoing: '追番中',
+        completed: '已完结',
+        dropped: '已放弃',
+      },
       refreshMetadata: '刷新元数据',
       refreshSuccess: '元数据已刷新',
       progress: '进度',
@@ -239,6 +246,8 @@ export const translations = {
       toolHealth: 'Tool Health',
       healthy: 'Healthy',
       unhealthy: 'Unhealthy',
+      refreshHealth: 'Refresh Health',
+      lastChecked: 'Last checked',
     },
     subscriptions: {
       title: 'Subscriptions',
@@ -254,6 +263,11 @@ export const translations = {
         autoDownload: 'Auto Download',
       },
       noSubscriptions: 'No subscriptions yet',
+      statuses: {
+        ongoing: 'Ongoing',
+        completed: 'Completed',
+        dropped: 'Dropped',
+      },
       refreshMetadata: 'Refresh Metadata',
       refreshSuccess: 'Metadata refreshed',
       progress: 'Progress',
