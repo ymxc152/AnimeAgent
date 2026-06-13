@@ -78,8 +78,15 @@ class OrganizeFilesNode:
                 FileSystemToolInput(action="hardlink", src=str(src_path), dst=str(dst))
             )
             if not linked.success:
-                errors.append(f"Failed to organize {src_path}: {linked.error}")
-                continue
+                # Hardlinks cannot cross volumes; fall back to a copy so the
+                # episode still ends up in the library even when the download
+                # folder and media library are on different shares.
+                copied = await self.fs_tool.invoke(
+                    FileSystemToolInput(action="copy", src=str(src_path), dst=str(dst))
+                )
+                if not copied.success:
+                    errors.append(f"Failed to organize {src_path}: {copied.error}")
+                    continue
 
             organized_paths.append(str(dst))
 

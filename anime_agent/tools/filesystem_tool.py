@@ -1,5 +1,6 @@
 """Filesystem tool for hardlinking, moving, copying, and creating directories."""
 
+import os
 import shutil
 from pathlib import Path
 
@@ -62,15 +63,19 @@ class FileSystemTool(BaseTool):
         if not fs_input.src:
             return ToolOutput(success=False, error="src is required for list_files")
 
-        src_path = Path(fs_input.src)
-        if not src_path.exists():
-            return ToolOutput(success=False, error=f"Source does not exist: {fs_input.src}")
-
+        src = fs_input.src
         try:
-            if src_path.is_file():
-                files = [str(src_path)]
+            if not os.path.exists(src):
+                return ToolOutput(success=False, error=f"Source does not exist: {src}")
+
+            if os.path.isfile(src):
+                files = [src]
             else:
-                files = [str(p) for p in src_path.rglob("*") if p.is_file()]
+                files = [
+                    str(p)
+                    for p in Path(src).rglob("*")
+                    if os.path.isfile(str(p))
+                ]
         except OSError as exc:
             return ToolOutput(success=False, error=f"Failed to list files: {exc}")
 
@@ -83,10 +88,10 @@ class FileSystemTool(BaseTool):
         src_path = Path(fs_input.src)
         dst_path = Path(fs_input.dst)
 
-        if not src_path.exists():
-            return ToolOutput(success=False, error=f"Source does not exist: {fs_input.src}")
-
         try:
+            if not os.path.exists(fs_input.src):
+                return ToolOutput(success=False, error=f"Source does not exist: {fs_input.src}")
+
             dst_path.parent.mkdir(parents=True, exist_ok=True)
 
             if fs_input.action == "hardlink":

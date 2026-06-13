@@ -11,6 +11,7 @@ from sqlalchemy.ext.asyncio import AsyncSession, async_sessionmaker
 
 from anime_agent.agents.episode.graph import build_episode_graph
 from anime_agent.agents.episode.state import EpisodeAgentState
+from anime_agent.config import settings
 from anime_agent.memory.models import Episode, Subscription, TaskSchedule
 from anime_agent.memory.store import Store
 
@@ -85,7 +86,7 @@ class EpisodeGraphRunner:
                 "link": link,
             }
 
-        download_path = cast(str | None, episode.download_path)
+        download_path = self._map_remote_path(cast(str | None, episode.download_path))
         download_files: list[str] = [download_path] if download_path else []
 
         # Determine RSS source: prefer subscription's explicit source, fall back to default
@@ -103,7 +104,7 @@ class EpisodeGraphRunner:
             title_romaji=cast(str, subscription.title_romaji),
             title_native=cast(str, subscription.title_native or ""),
             title_chinese=cast(str | None, subscription.title_chinese),
-            season=int(getattr(subscription, "season", 1) or 1),
+            season=self._parse_season(getattr(subscription, "season", None)),
             bangumi_data={},
             anilist_data={},
             tmdb_data=None,
@@ -130,6 +131,25 @@ class EpisodeGraphRunner:
             resume_after=None,
             resource_searched=False,
         )
+
+    @staticmethod
+    def _parse_season(raw: Any) -> int:
+        """Parse a numeric season, defaulting to 1 for non-numeric values."""
+        try:
+            return int(raw or 1)
+        except (ValueError, TypeError):
+            return 1
+
+    @staticmethod
+    def _map_remote_path(remote_path: str | None) -> str | None:
+        """Map a qBittorrent remote path to the local network share path."""
+        if not remote_path or not settings.qb_path_map_remote or not settings.qb_path_map_local:
+            return remote_path
+        remote = settings.qb_path_map_remote.rstrip("\\/")
+        local = settings.qb_path_map_local.rstrip("\\/")
+        if remote_path.lower().startswith(remote.lower()):
+            return local + remote_path[len(remote) :]
+        return remote_path
 
     async def _persist_results(
         self,
