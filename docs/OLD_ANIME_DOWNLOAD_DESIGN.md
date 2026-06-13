@@ -35,9 +35,9 @@
 
 ### 已知问题
 
-1. **`AnimeGardenTool.invoke` 签名违反 Liskov 替换原则**
-   - 位置：`anime_agent/tools/animes_garden_tool.py:67`
-   - `invoke(self, input_data: AnimeGardenToolInput)` 与 `BaseTool.invoke(self, input_data: ToolInput)` 签名不一致，MyPy 报错。
+1. ~~**`AnimeGardenTool.invoke` 签名违反 Liskov 替换原则**~~ ✅ **已修复**
+   - 位置：`anime_agent/tools/animes_garden_tool.py:66`
+   - 当前签名与 `BaseTool.invoke(self, input_data: ToolInput)` 一致；内部通过 `isinstance` 校验具体输入类型，MyPy 通过。
 
 2. **`AnimeGardenTool` 无缓存**
    - 同一关键词高频调用会增加 API 压力和响应延迟。

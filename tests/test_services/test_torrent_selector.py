@@ -103,6 +103,33 @@ async def test_selector_prefilters_by_title_tokens():
     assert "[Sub] Wrong Show - 01 [1080p].mkv" not in titles
 
 
+async def test_selector_falls_back_to_episode_only_when_title_tokens_remove_all():
+    """Selector should fall back to episode-only filtering when title tokens are too strict."""
+    candidates = [
+        _candidate("[Sub] Abbreviated - 01 [1080p].mkv", "abc1"),
+        _candidate("[Sub] Different Show - 01 [1080p].mkv", "abc2"),
+    ]
+
+    llm_tool = AsyncMock()
+    llm_tool.invoke.return_value = ToolOutput(
+        success=True, data={"json": {"info_hash": "abc1", "confidence": 0.85}}
+    )
+
+    selector = TorrentSelector(llm_tool=llm_tool)
+    result = await selector.select(
+        candidates=candidates,
+        episode_number=1,
+        title_variants=["Otonari no Tenshi-sama ni Itsunomanika Dame Ningen ni Sareteita Ken 2"],
+        failed_hashes=[],
+    )
+
+    assert result.success is True
+    passed = result.data.get("prefiltered", [])
+    # Both episode-1 candidates should be passed to the LLM because no title
+    # token from the full romaji title matched.
+    assert len(passed) == 2
+
+
 async def test_selector_returns_llm_match():
     """Selector should return the LLM-chosen candidate with confidence."""
     candidates = [

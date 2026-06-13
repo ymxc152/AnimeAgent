@@ -29,8 +29,10 @@ class ReflectMatchNode:
 
     async def __call__(self, state: dict[str, Any]) -> dict[str, Any]:
         """Reason about candidates and recommend the next action."""
+        prior_status = state.get("status", "low_confidence")
         logger.info(
-            "Reflecting on low-confidence match for episode {} of subscription {}",
+            "Reflecting on {} for episode {} of subscription {}",
+            prior_status,
             state.get("episode_number"),
             state.get("subscription_id"),
         )
@@ -58,6 +60,7 @@ class ReflectMatchNode:
             title_variants=title_variants,
             episode_number=state.get("episode_number", 1),
             low_confidence_count=state.get("low_confidence_count", 0),
+            prior_status=prior_status,
         )
 
         schema = {
@@ -118,6 +121,13 @@ class ReflectMatchNode:
             logger.info("Reflection requested broader search for episode {}", state.get("episode_number"))
             return {"status": "search_resources"}
 
+        if action == "search_resources" and state.get("resource_searched"):
+            logger.info(
+                "Reflection wanted search but already searched for episode {}; waiting for RSS",
+                state.get("episode_number"),
+            )
+            return {"status": "schedule_resume"}
+
         if action == "wait":
             logger.info("Reflection decided to wait for better candidates for episode {}", state.get("episode_number"))
             return {"status": "schedule_resume"}
@@ -150,10 +160,17 @@ class ReflectMatchNode:
         title_variants: list[str],
         episode_number: int,
         low_confidence_count: int,
+        prior_status: str,
     ) -> str:
+        context = (
+            "A previous matcher returned low confidence."
+            if prior_status == "low_confidence"
+            else "A previous matcher found candidates but could not confidently match any to this anime/episode."
+        )
         lines = [
             f"Target anime titles: {' / '.join(title_variants)}",
             f"Target episode: {episode_number}",
+            f"Context: {context}",
             f"Previous low-confidence attempts: {low_confidence_count}",
             f"Already failed hashes: {failed_hashes}",
             "",

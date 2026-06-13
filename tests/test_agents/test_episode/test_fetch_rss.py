@@ -175,3 +175,25 @@ async def test_fetch_rss_falls_back_when_source_inactive(mock_store):
     assert result["status"] == "fetching"
     call_url = rss_tool.invoke.call_args[0][0].url
     assert call_url == "https://fallback.com/rss"
+
+
+def test_fetch_rss_builds_nyaa_title_url():
+    """FetchRSSNode should append the anime title to Nyaa q parameter."""
+    node = FetchRSSNode()
+    url = node._build_source_url("https://nyaa.si/?page=rss&q=1080p&c=1_3&f=2", "Frieren")
+    assert "q=1080p+Frieren" in url or "q=Frieren+1080p" in url
+
+
+def test_fetch_rss_builds_animegarden_title_url():
+    """FetchRSSNode should append the anime title to AnimeGarden keyword parameters."""
+    node = FetchRSSNode()
+    url = node._build_source_url("https://api.animes.garden/feed.xml?keyword=1080", "Frieren")
+    assert "keyword=1080" in url
+    assert "keyword=Frieren" in url
+
+
+def test_fetch_rss_leaves_unknown_sources_unchanged():
+    """FetchRSSNode should not modify URLs for unknown RSS sources."""
+    node = FetchRSSNode()
+    original = "https://example.com/rss?search=1080p"
+    assert node._build_source_url(original, "Frieren") == original

@@ -5,6 +5,7 @@ from typing import Any
 
 from anime_agent.tools.base import BaseTool, ToolOutput
 from anime_agent.tools.llm_tool import LLMToolInput
+from anime_agent.utils.logger import logger
 
 # Maximum candidates sent to the LLM to keep prompts manageable.
 _MAX_CANDIDATES = 20
@@ -13,9 +14,9 @@ _MAX_CANDIDATES = 20
 class TorrentSelector:
     """Select the best torrent candidate for an episode.
 
-    Strategy: pre-filter only by episode number (no title keyword matching),
-    then let the LLM choose the best candidate using romaji title, quality,
-    and release-group heuristics.
+    Pre-filter by episode number and, when possible, by title tokens.  If title
+    tokens are too restrictive, fall back to episode-only filtering and let the
+    LLM decide whether a candidate really belongs to the target anime.
     """
 
     def __init__(self, llm_tool: BaseTool | None = None):
@@ -29,7 +30,35 @@ class TorrentSelector:
         failed_hashes: list[str],
     ) -> ToolOutput:
         """Pre-filter by episode number, then LLM selection."""
-        prefiltered = self._prefilter(candidates, episode_number, failed_hashes, title_variants)
+        title_tokens = self._extract_title_tokens(title_variants or [])
+        strict_prefiltered = self._prefilter(
+            candidates, episode_number, failed_hashes, title_tokens
+        )
+
+        if strict_prefiltered:
+            logger.debug(
+                "Strict prefilter kept {} of {} candidates for episode {}",
+                len(strict_prefiltered),
+                len(candidates),
+                episode_number,
+            )
+            prefiltered = strict_prefiltered
+        else:
+            # Title tokens may be too restrictive (generic RSS feed, different
+            # romanization, abbreviations).  Fall back to episode-only and let
+            # the LLM figure out the title match.
+            episode_only = self._prefilter(
+                candidates, episode_number, failed_hashes, title_tokens=None
+            )
+            logger.warning(
+                "Title-token prefilter removed all {} candidates for episode {}; "
+                "falling back to episode-only filter ({} candidates). Title tokens: {}",
+                len(candidates),
+                episode_number,
+                len(episode_only),
+                sorted(title_tokens),
+            )
+            prefiltered = episode_only
 
         if not prefiltered:
             return ToolOutput(
@@ -38,6 +67,7 @@ class TorrentSelector:
                     "matched": False,
                     "reason": "No candidates after episode-number filter",
                     "prefiltered": [],
+                    "title_tokens": sorted(title_tokens),
                 },
             )
 
@@ -100,10 +130,9 @@ class TorrentSelector:
         candidates: list[dict[str, Any]],
         episode_number: int,
         failed_hashes: list[str],
-        title_variants: list[str] | None = None,
+        title_tokens: set[str] | None = None,
     ) -> list[dict[str, Any]]:
         """Keep only candidates that match the target episode number and title."""
-        title_tokens = self._extract_title_tokens(title_variants or [])
         result = []
         for candidate in candidates:
             info_hash = candidate.get("info_hash")

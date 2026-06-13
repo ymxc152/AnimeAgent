@@ -20,8 +20,10 @@ class TorrentHealth:
         added_at = status.get("added_at") or now
         last_speed_at = status.get("last_speed_at") or now
 
-        # Completed states
-        if progress >= 1.0 and state in ("uploading", "pausedUP", "queuedUP"):
+        # Completed: progress is 100% and we are not still downloading metadata.
+        # qBittorrent may report 100% progress in states like "checkingUP",
+        # "checkingDL", or a transient "downloading" during recheck.
+        if progress >= 1.0 and state not in ("metaDL", "error", "missingFiles"):
             return {"state": "completed", "reason": "Download finished", "recommend": "process"}
 
         # Hard failures: error / missing files should switch immediately.

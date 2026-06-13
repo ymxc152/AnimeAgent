@@ -1,6 +1,7 @@
 """fetch_rss node for Episode Graph."""
 
 from typing import Any
+from urllib.parse import parse_qs, urlencode, urlparse, urlunparse
 
 from sqlalchemy.ext.asyncio import AsyncSession, async_sessionmaker
 
@@ -43,8 +44,9 @@ class FetchRSSNode:
             c.get("info_hash") for c in merged if c.get("info_hash")
         }
 
+        title = self._search_title(state)
         for source in sources:
-            url = source.url
+            url = self._build_source_url(source.url, title)
             logger.info("Fetching RSS source: {} ({})", source.name, url)
             result = await self.rss_tool.invoke(RSSToolInput(url=url))
             if not result.success:
@@ -105,3 +107,42 @@ class FetchRSSNode:
                     rss_source_id,
                 )
             return await store.rss_sources.list_active()
+
+    def _search_title(self, state: dict[str, Any]) -> str:
+        """Return the best title to inject into RSS search queries."""
+        for key in ("title_chinese", "title_romaji", "title_native"):
+            title = state.get(key)
+            if isinstance(title, str) and title:
+                return title
+        return ""
+
+    def _build_source_url(self, url: str, title: str) -> str:
+        """Narrow generic RSS feeds by appending the anime title to the query.
+
+        Supports Nyaa (`q` parameter) and AnimeGarden (`search`/`keyword`
+        parameters).  Other sources are left unchanged.
+        """
+        if not title:
+            return url
+
+        parsed = urlparse(url)
+        query = parse_qs(parsed.query)
+        hostname = parsed.hostname or ""
+
+        if "nyaa.si" in hostname:
+            # Nyaa search parameter is "q"; append title to existing query.
+            existing = " ".join(query.get("q", []))
+            query["q"] = [f"{existing} {title}".strip()]
+        elif "animes.garden" in hostname:
+            # AnimeGarden feed uses "search" or repeated "keyword" params.
+            if "search" in query:
+                existing = " ".join(query.get("search", []))
+                query["search"] = [f"{existing} {title}".strip()]
+            else:
+                query.setdefault("keyword", [])
+                query["keyword"].append(title)
+        else:
+            return url
+
+        new_query = urlencode(query, doseq=True)
+        return urlunparse(parsed._replace(query=new_query))

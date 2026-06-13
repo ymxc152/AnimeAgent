@@ -48,10 +48,16 @@ def _after_match_torrent(state: EpisodeAgentState) -> str:
         return "send_download"
     if status == "search_resources":
         return "search_resources"
-    if status in ("waiting_for_rss", "no_match"):
+    if status == "waiting_for_rss":
         return "schedule_resume"
     if status == "low_confidence":
         return "reflect_match"
+    if status == "no_match":
+        # If we have candidates but the matcher couldn't decide, let the
+        # reflection agent choose between searching elsewhere or giving up.
+        if state.get("torrent_candidates"):
+            return "reflect_match"
+        return "schedule_resume"
     return "handle_error"
 
 

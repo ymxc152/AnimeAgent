@@ -29,67 +29,79 @@
 
 ### 测试现状
 
-- **pytest**：`262 passed, 1 skipped, 14 deselected`（`test_web/test_frontend.py` 在 `frontend/dist` 不存在时跳过）。
+- **pytest**：`271 passed, 1 skipped, 14 deselected`（含新增强化 RSS、reflect_match、torrent_health 用例；`test_web/test_frontend.py` 在 `frontend/dist` 不存在时跳过）。
 - **Ruff**：通过，无 lint 错误。
 - **MyPy**：通过，无类型错误。
 - CI 当前为绿色。
 
 ### 明显 Bug 与代码问题
 
-1. ~~**`match_torrent` 低置信度处理未实现**~~ ✅ **已修复**
-   - 位置：`anime_agent/agents/episode/nodes/match_torrent.py`
-   - 修复：新增 `HIGH_CONFIDENCE_THRESHOLD=0.8`，置信度 0.5~0.8 时递增 `low_confidence_count` 并返回 `low_confidence`；由新的 `reflect_match` 节点进行二次审查并决定后续路由。
+1. ~~**`match_torrent` 低置信度 / 无匹配处理未实现**~~ ✅ **已修复**
+   - 位置：`anime_agent/agents/episode/nodes/match_torrent.py` + `reflect_match.py`
+   - 修复：
+     - 置信度 0.5~0.8 时返回 `low_confidence`，进入 `reflect_match`。
+     - 有候选但无法匹配时返回 `no_match`，同样进入 `reflect_match` 由 agent 决策是否搜索 AnimeGarden、等待 RSS 或人工审查。
    - 验证：相关 pytest 用例通过。
 
-2. **Episode 模型存在 `torrent_hash` 与 `torrent_info_hash` 双字段**
+2. ~~**RSS 查询过于宽泛导致匹配不到任何种子**~~ ✅ **已修复**
+   - 位置：`anime_agent/agents/episode/nodes/fetch_rss.py`
+   - 修复：`FetchRSSNode` 在调用 Nyaa / AnimeGarden 源时，自动把番剧标题注入到搜索参数中（Nyaa 的 `q`、AnimeGarden 的 `keyword`），缩小候选范围。
+   - 验证：新增 URL 构建单元测试。
+
+3. ~~**100% 进度但状态卡在 `downloading` 不进入整理**~~ ✅ **已修复**
+   - 位置：`anime_agent/services/torrent_health.py`
+   - 修复：只要 `progress >= 1.0` 且不是错误/元数据状态，即视为 `completed`，不再依赖 qBittorrent 的 `uploading/pausedUP/queuedUP` 状态。
+   - 验证：新增单元测试。
+
+4. **Episode 模型存在 `torrent_hash` 与 `torrent_info_hash` 双字段**
    - 位置：`anime_agent/memory/models.py:69,72`
    - 现象：`send_download` 写入 `torrent_hash`，`poll_download` 读取 `torrent_hash`，`runner.py` 读取/写入 `torrent_info_hash`。两个字段可能不一致，导致状态混乱。
    - 建议：统一字段名并迁移数据。
 
-3. **`OrganizeFilesNode` 硬编码 `season=1`**
+5. **`OrganizeFilesNode` 硬编码 `season=1`**
    - 位置：`anime_agent/agents/episode/nodes/organize_files.py:101`
    - 现象：多季番剧全部被整理到 `S01E##`，与架构 §8.9 的 TMDB 季度验证不符。
 
-4. **Scheduler 每 tick 处理所有非终态 Episode**
+6. **Scheduler 每 tick 处理所有非终态 Episode**
    - 位置：`anime_agent/services/scheduler.py:140-161`
    - 现象：未根据 `expected_airing_weekday` 与播出时间判断是否已播出，也无错峰调度。与架构 §5.6 Step 7 / §8.2 的"按播出周几智能触发"不符。
 
-5. **Discovery 未按 Bangumi 优先实现**
-   - 位置：`anime_agent/services/discovery.py:48`、`anime_agent/services/metadata_resolver.py:79-87`
-   - 现象：季度发现直接调用 AniList；Bangumi 仅作为 `web.py` 发现端点的 fallback。与架构 §5.2 / §5.6 Step 2 的"Bangumi 优先"不符。
+7. **Discovery 服务与 Web 端点实现不一致**
+   - 位置：`anime_agent/services/discovery.py:48` / `anime_agent/services/metadata_resolver.py:79-87` / `anime_agent/web.py:412-484`
+   - 现象：`DiscoveryService` 直接调用 AniList，无 Bangumi fallback；而 Web 发现端点使用 Bangumi calendar 优先，AniList 作为 fallback。两者未统一为"Bangumi 优先"。与架构 §5.2 / §5.6 Step 2 的决策不符。
 
-6. **`PollDownloadNode` 未使用 `TorrentHealth` 服务**
-   - 位置：`anime_agent/agents/episode/nodes/poll_download.py`
-   - 现象：节点内置简化判定，未调用 `services/torrent_health.py` 的 `evaluate()`；轮询间隔统一使用 `check_interval_seconds`，未按健康/stall/metadata 自适应（架构 §8.6 / §17.4）。
+8. ~~**`PollDownloadNode` 未使用 `TorrentHealth` 服务**~~ ✅ **已修复**
+   - 位置：`anime_agent/agents/episode/nodes/poll_download.py:24,53`
+   - 修复：节点已实例化 `TorrentHealth` 并调用 `health.evaluate(status)` 辅助判定；轮询间隔仍统一使用 `check_interval_seconds`，自适应间隔尚未实现。
 
-7. **`ScheduleResumeNode` 未区分 RSS 等待与下载轮询间隔**
+9. **`ScheduleResumeNode` 未区分 RSS 等待与下载轮询间隔**
    - 位置：`anime_agent/agents/episode/nodes/schedule_resume.py:18`
    - 现象：统一使用 `check_interval_seconds`（默认 600 秒），而架构 §8.7 要求 RSS 等待 6 小时、§8.8 要求自适应轮询。
 
-8. **`CompletionChecker` 外部状态分支不可达**
-   - 位置：`anime_agent/services/completion_checker.py:44-50`
-   - 现象：`all_completed` 已在前面提前返回，导致 `external_status == "FINISHED" and all_completed` 分支永远不会执行。
+10. **`CompletionChecker` 外部状态分支不可达**
+    - 位置：`anime_agent/services/completion_checker.py:44-50`
+    - 现象：`all_completed` 已在前面提前返回，导致 `external_status == "FINISHED" and all_completed` 分支永远不会执行。
 
-9. **Web 创建订阅时 `total_episodes=None` 生成 0 集**
-   - 位置：`anime_agent/web.py:122-129`
-   - 现象：元数据未找到总集数时创建 0 个 Episode，Subscription 无法进入正常调度。
+11. ~~**Web 创建订阅时 `total_episodes=None` 生成 0 集**~~ ✅ **已修复**
+    - 位置：`anime_agent/web.py:102`
+    - 修复：`total_episodes = payload.total_episodes or details.get("total_episodes") or 12`，缺失时默认按 12 集创建。
 
-10. **`DiscoveryService._create_subscription` 硬编码 12 集兜底**
+12. **`DiscoveryService._create_subscription` 硬编码 12 集兜底**
     - 位置：`anime_agent/services/discovery.py:93`
     - 现象：当 `total_episodes` 缺失时直接按 12 集创建，未在文档中说明。
 
-11. **配置项缺失**
+13. **配置项缺失**
     - `config.py` / `.env.example` 未包含 `OLD_ANIME_DOWNLOAD_DESIGN.md` 规划的 `ANIME_GARDEN_*`、`RESOURCE_FALLBACK_*`、`RESOURCE_SEARCH_MAX_PAGES`。
     - `AnimeGardenTool` 未实现 1 小时关键词缓存。
 
-12. ~~**前端构建产物缺失导致 `test_root_serves_frontend_index` 失败**~~ ✅ **已修复**
+14. ~~**前端构建产物缺失导致 `test_root_serves_frontend_index` 失败**~~ ✅ **已修复**
     - 位置：`tests/test_web/test_frontend.py:7`
     - 修复：当 `frontend/dist` 不存在时，`test_root_serves_frontend_index` 使用 `@pytest.mark.skipif` 跳过，避免后端测试依赖前端构建产物。
     - 说明：生产/本地使用 Web 面板前仍需执行 `npm run build` 生成 `frontend/dist`。
 
-13. ~~**MyPy / Ruff 失败项**~~ ✅ **已修复**
-    - Ruff：清理了 27 个 lint 错误（未使用导入、导入排序、`SIM110` 循环改写等）。
-    - MyPy：修复了 10 个类型错误（`AnimeGardenTool.invoke` 签名、`llm_tool.py` 内容类型、`web.py` SQLAlchemy Column 传递、`runner.py` `rss_source_id` 类型）。
+15. ~~**MyPy / Ruff 失败项**~~ ✅ **已修复**
+    - Ruff：清理了 lint 错误（未使用导入、导入排序、`SIM110` 循环改写等）。
+    - MyPy：修复了类型错误（`llm_tool.py` 内容类型、`web.py` SQLAlchemy Column 传递、`runner.py` `rss_source_id` 类型等）。`AnimeGardenTool.invoke` 签名与 `BaseTool.invoke` 兼容。
 
 ### 与文档规划的主要偏差
 
@@ -106,7 +118,7 @@
 ### 后续建议优先级
 
 - **P0**：~~修复 `match_torrent` 低置信度逻辑；处理前端测试失败；清理 lint/type 错误~~ ✅ **已完成**。
-- **P1**：统一 `torrent_hash` / `torrent_info_hash`；`OrganizeFilesNode` 使用 Subscription 真实季数；`PollDownloadNode` 接入 `TorrentHealth`。
+- **P1**：统一 `torrent_hash` / `torrent_info_hash`；`OrganizeFilesNode` 使用 Subscription 真实季数；`PollDownloadNode` 实现自适应轮询间隔。
 - **P2**：Discovery 改为 Bangumi 优先；Scheduler 增加播出时间门控与错峰调度；实现 `process_metadata` 与 `notify_user` 节点。
 - **P3**：实现最小对话层；按 OLD 设计补齐 Anime Garden 缓存、配置项与 StatusQueryService。
 
@@ -140,7 +152,7 @@
 | 订阅模型 | 一 Subscription 对应一季/一个作品 | 简化 AniList 查询、RSS 匹配、文件整理 |
 | State vs DB | 中间产物持久化到 DB | 便于任务恢复、Web 监控、错误重试 |
 | 人机协同 | MVP 仅保留"种子匹配置信度低"一个断点 | 其他歧义由 LLM 决策 + 日志记录 |
-| Web 面板 | FastAPI 后端 + React/Vite/Tailwind CSS 前端 | 支持 NL 聊天 + 表单两种订阅方式 |
+| Web 面板 | FastAPI 后端 + React/Vite/Tailwind CSS 前端 | 支持表单订阅、发现页、集数管理、工具健康检查；对话层未实现，暂无 NL 聊天。 |
 | 运行环境 | Windows 原生运行为主 | 用户 qB/Emby 均在 Windows，Docker 作为可选项 |
 | 新番订阅 | 自动订阅当季新番默认开启 | 调度层 每周发现一次，自动创建 Subscription；用户可在 Web 关闭指定番剧的自动下载 |
 | MVP 周期 | 3 周 | 三个工作流 + NL + Bangumi 集成 + 完整 Episode Graph 需要更多时间 |
@@ -187,12 +199,14 @@ ani-agent/
 ├── .pre-commit-config.yaml     # pre-commit hooks
 ├── .env.example                # 环境变量模板
 ├── .gitignore
+├── .gitattributes              # 换行符规范化
 ├── LICENSE
 ├── README.md
 ├── CHANGELOG.md
 ├── CONTRIBUTING.md
+├── IMPLEMENTATION_PLAN.md      # 原始实施计划（历史）
 ├── pyproject.toml
-├── config.yaml                 # 主配置（可选，与 .env 互补）
+├── uv.lock                     # uv 依赖锁定
 ├── anime_agent.db              # SQLite（gitignored）
 ├── logs/                       # 日志目录（gitignored）
 │
@@ -200,103 +214,94 @@ ani-agent/
 │   ├── __init__.py
 │   ├── main.py                 # 系统主入口：init_db + 启动 scheduler
 │   ├── web.py                  # FastAPI 应用 + 静态前端
-│   ├── scheduler.py            # APScheduler 封装
-│   │
-│   ├── conversational/         # ===== 对话层=====
-│   │   ├── __init__.py
-│   │   ├── intent.py           # 用户意图解析
-│   │   ├── dialogue.py         # 多轮对话状态管理
-│   │   └── response.py         # 生成回复
-│   │
-│   ├── conversational_nodes/   # ===== 对话工作流 节点 =====
-│   │   ├── __init__.py
-│   │   ├── parse_input.py
-│   │   ├── search_candidates.py
-│   │   ├── ask_clarification.py
-│   │   ├── confirm_action.py
-│   │   └── invoke_orchestrator.py
-│   │
-│   ├── orchestrator/           # ===== 调度层=====
-│   │   ├── __init__.py
-│   │   ├── discovery.py        # 新番发现
-│   │   ├── filter.py           # 内容过滤
-│   │   ├── planner.py          # 任务调度计划生成
-│   │   └── completion.py       # 完结检测与全集完成检查
-│   │
-│   ├── orchestrator_nodes/     # ===== 调度工作流 节点 =====
-│   │   ├── __init__.py
-│   │   ├── parse_input.py
-│   │   ├── search_anime.py
-│   │   ├── select_anime.py
-│   │   ├── ask_user_clarify.py
-│   │   ├── apply_filters.py
-│   │   ├── create_subscriptions.py
-│   │   └── schedule_checks.py
-│   │
+│   ├── web_schemas.py          # Pydantic API schema
 │   ├── config.py               # Pydantic Settings
-│   ├── state.py                # AgentState TypedDict
-│   ├── graph.py                # LangGraph 构建
-│   ├── metrics.py              # 简单计数器/指标（预留）
 │   │
-│   ├── tools/                  # ===== 工具层（外部 IO）=====
+│   ├── agents/
+│   │   ├── conversational/     # 对话层（占位，未实现）
+│   │   │   └── __init__.py
+│   │   └── episode/            # Episode Graph
+│   │       ├── __init__.py
+│   │       ├── graph.py        # LangGraph 构建
+│   │       ├── runner.py       # Graph 执行与状态持久化
+│   │       ├── state.py        # AgentState TypedDict
+│   │       └── nodes/          # Episode Graph 节点
+│   │           ├── fetch_rss.py
+│   │           ├── match_torrent.py
+│   │           ├── reflect_match.py
+│   │           ├── send_download.py
+│   │           ├── poll_download.py
+│   │           ├── organize_files.py
+│   │           ├── refresh_emby.py
+│   │           ├── search_resources.py
+│   │           ├── schedule_resume.py
+│   │           ├── human_review.py
+│   │           └── handle_error.py
+│   │
+│   ├── services/               # 业务逻辑层
+│   │   ├── __init__.py
+│   │   ├── scheduler.py        # APScheduler 封装与 tick 调度
+│   │   ├── discovery.py        # 新番发现
+│   │   ├── metadata_resolver.py
+│   │   ├── content_filter.py
+│   │   ├── torrent_selector.py
+│   │   ├── torrent_health.py
+│   │   ├── episode_planner.py
+│   │   ├── completion_checker.py
+│   │   └── healthcheck.py
+│   │
+│   ├── tools/                  # 外部 IO 工具层
 │   │   ├── __init__.py
 │   │   ├── base.py             # BaseTool, ToolInput, ToolOutput
-│   │   ├── llm_tool.py         # OpenAI / Ollama 封装
-│   │   ├── bangumi_tool.py     # Bangumi 中文元数据
-│   │   ├── anilist_tool.py     # AniList GraphQL
-│   │   ├── tmdb_tool.py        # TMDB REST API
-│   │   ├── rss_tool.py         # RSS 解析
-│   │   ├── qb_tool.py          # qBittorrent
-│   │   ├── emby_tool.py        # Emby REST API
-│   │   ├── notify_tool.py      # apprise / 日志通知
-│   │   └── filesystem_tool.py  # 硬链接/移动/创建目录
+│   │   ├── llm_tool.py
+│   │   ├── bangumi_tool.py
+│   │   ├── anilist_tool.py
+│   │   ├── tmdb_tool.py
+│   │   ├── rss_tool.py
+│   │   ├── animes_garden_tool.py
+│   │   ├── qb_tool.py
+│   │   ├── emby_tool.py
+│   │   ├── notify_tool.py
+│   │   └── filesystem_tool.py
 │   │
-│   ├── nodes/                  # ===== Episode Graph 节点 =====
+│   ├── memory/                 # SQLite ORM 与数据访问
 │   │   ├── __init__.py
-│   │   ├── check_tool_health.py# 启动时工具健康检查
-│   │   ├── check_updates.py    # 查询 AniList，确认是否有更新
-│   │   ├── fetch_rss.py        # 拉取 RSS 候选
-│   │   ├── match_torrent.py    # LLM 匹配种子
-│   │   ├── send_download.py    # 推送 qBittorrent
-│   │   ├── poll_download.py    # 轮询下载完成
-│   │   ├── schedule_wait_rss.py# 安排 RSS 等待重试
-│   │   ├── schedule_poll.py    # 安排下载轮询
-│   │   ├── process_metadata.py # 内容分类 + 元数据验证
-│   │   ├── organize_files.py   # 硬链接整理文件
-│   │   ├── refresh_emby.py     # 刷新 Emby 媒体库
-│   │   ├── notify_user.py      # 通知用户
-│   │   ├── handle_error.py     # 错误处理与持久化
-│   │   └── human_review.py     # 人工断点（种子匹配）
-│   │
-│   ├── memory/                 # ===== 记忆层（SQLite）=====
-│   │   ├── __init__.py
-│   │   ├── database.py         # aiosqlite engine + sessionmaker
-│   │   ├── models.py           # SQLAlchemy ORM
-│   │   ├── store.py            # 高层 CRUD 封装
-│   │   └── init_db.py          # 建表
+│   │   ├── database.py
+│   │   ├── models.py
+│   │   ├── store.py
+│   │   └── init_db.py
 │   │
 │   └── utils/
-│       ├── logger.py           # loguru 配置
-│       └── backup.py           # 数据库备份（预留接口）
+│       ├── __init__.py
+│       └── logger.py           # loguru 配置
 │
 ├── tests/
+│   ├── __init__.py
 │   ├── conftest.py
-│   ├── fixtures/               # mock 数据 / VCR cassettes
+│   ├── fakes/                  # 测试替身
+│   ├── test_agents/
+│   ├── test_services/
 │   ├── test_tools/
-│   ├── test_nodes/
-│   └── test_integration/
+│   ├── test_memory/
+│   ├── test_integration/
+│   ├── test_real_data/         # 真实外部 API 测试（默认跳过）
+│   ├── test_web/
+│   └── test_config_validation.py
 │
 ├── docs/
-│   ├── ARCHITECTURE_AND_PLAN.md    # 本文档
-│   ├── adr/                        # 架构决策记录
-│   ├── deployment.md               # 部署指南
-│   └── architecture.png            # 架构图（后续生成）
+│   ├── ARCHITECTURE_AND_PLAN.md
+│   ├── OLD_ANIME_DOWNLOAD_DESIGN.md
+│   ├── IMPLEMENTATION_PLAN.md
+│   ├── deployment.md
+│   └── adr/
 │
 └── frontend/                   # React + TypeScript + Tailwind CSS 前端
     ├── index.html
     ├── src/
+    ├── public/
     ├── package.json
-    └── vite.config.ts
+    ├── vite.config.ts
+    └── tsconfig*.json
 ```
 
 ---

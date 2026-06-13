@@ -11,6 +11,7 @@ def _state(
     failed_hashes: list | None = None,
     resource_searched: bool = False,
     low_confidence_count: int = 1,
+    status: str = "low_confidence",
 ) -> dict:
     return {
         "subscription_id": 42,
@@ -22,6 +23,7 @@ def _state(
         "torrent_failed_hashes": failed_hashes or [],
         "resource_searched": resource_searched,
         "low_confidence_count": low_confidence_count,
+        "status": status,
     }
 
 
@@ -163,3 +165,55 @@ async def test_reflect_match_llm_failure_escalates():
 
     assert result["status"] == "human_review"
     assert result["requires_human"] is True
+
+
+async def test_reflect_match_no_match_searches_when_unsearched():
+    """reflect_match on no_match status should decide search when not yet searched."""
+    llm = AsyncMock()
+    llm.invoke.return_value = ToolOutput(
+        success=True,
+        data={
+            "json": {
+                "action": "search_resources",
+                "confidence": 0.3,
+                "reason": "No matching candidates in RSS feed",
+            }
+        },
+    )
+
+    node = ReflectMatchNode(llm_tool=llm)
+    result = await node(
+        _state(
+            candidates=[{"title": "unrelated", "info_hash": "abc1", "size": 1024**3}],
+            status="no_match",
+            resource_searched=False,
+        )
+    )
+
+    assert result["status"] == "search_resources"
+
+
+async def test_reflect_match_no_match_waits_when_already_searched():
+    """reflect_match should wait for RSS if search was already attempted."""
+    llm = AsyncMock()
+    llm.invoke.return_value = ToolOutput(
+        success=True,
+        data={
+            "json": {
+                "action": "search_resources",
+                "confidence": 0.3,
+                "reason": "No matching candidates anywhere",
+            }
+        },
+    )
+
+    node = ReflectMatchNode(llm_tool=llm)
+    result = await node(
+        _state(
+            candidates=[{"title": "unrelated", "info_hash": "abc1", "size": 1024**3}],
+            status="no_match",
+            resource_searched=True,
+        )
+    )
+
+    assert result["status"] == "schedule_resume"

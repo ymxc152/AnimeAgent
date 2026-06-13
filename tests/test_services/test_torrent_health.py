@@ -30,6 +30,16 @@ def test_health_detects_completed():
     assert result["state"] == "completed"
 
 
+def test_health_detects_completed_despite_downloading_state():
+    """TorrentHealth should mark 100% progress as completed even in transient downloading state."""
+    status = _status(progress=1.0, state="downloading")
+
+    result = TorrentHealth().evaluate(status)
+
+    assert result["state"] == "completed"
+    assert result["recommend"] == "process"
+
+
 def test_health_detects_stalled():
     """TorrentHealth should mark torrent as stalled after 1 hour of zero speed."""
     now = datetime.now(UTC)
