@@ -18,6 +18,7 @@ class EpisodeAgentState(TypedDict):
     title_romaji: str
     title_native: str
     title_chinese: str | None
+    series_title: str
     bangumi_data: dict[str, Any]
     anilist_data: dict[str, Any]
     tmdb_data: dict[str, Any] | None

@@ -90,7 +90,9 @@ export const translations = {
       updateError: '更新失败',
       toggleError: '切换自动下载失败',
       searchById: '通过 Bangumi / AniList ID 搜索',
-      idPlaceholder: '输入 ID 或标题进行搜索'
+      idPlaceholder: '输入 ID 或标题进行搜索',
+      lookup: '查询',
+      lookupSuccess: '已回填元数据'
     },
     episodes: {
       title: '剧集管理',
@@ -321,7 +323,9 @@ export const translations = {
       updateError: 'Failed to update subscription',
       toggleError: 'Failed to toggle auto download',
       searchById: 'Search by Bangumi / AniList ID',
-      idPlaceholder: 'Enter ID or title to search'
+      idPlaceholder: 'Enter ID or title to search',
+      lookup: 'Lookup',
+      lookupSuccess: 'Metadata filled'
     },
     episodes: {
       title: 'Episodes',

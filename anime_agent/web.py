@@ -17,13 +17,19 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from anime_agent.config import settings
 from anime_agent.memory.database import get_db
 from anime_agent.memory.init_db import init_database
-from anime_agent.memory.models import Episode, RSSSource, Subscription
+from anime_agent.memory.models import AutoSubscribeRule, Episode, RSSSource, Subscription
 from anime_agent.memory.store import Store
 from anime_agent.services.content_filter import ContentFilter, FilterRules
 from anime_agent.services.metadata_resolver import MetadataResolver
+from anime_agent.services.series_metadata_resolver import SeriesMetadataResolver
+from anime_agent.tools.anilist_tool import AniListTool, AniListToolInput
 from anime_agent.tools.bangumi_tool import BangumiTool, BangumiToolInput
 from anime_agent.tools.base import BaseTool
 from anime_agent.web_schemas import (
+    AnimeLookupResponse,
+    AutoSubscribeRuleCreateRequest,
+    AutoSubscribeRuleResponse,
+    AutoSubscribeRuleUpdateRequest,
     DiscoverySubscribeRequest,
     EpisodeDetailResponse,
     EpisodeResponse,
@@ -75,6 +81,7 @@ async def _create_subscription_from_payload(
             return existing
 
     resolver = MetadataResolver()
+    series_resolver = SeriesMetadataResolver()
     details: dict[str, Any] = {}
 
     if payload.bangumi_id or payload.anilist_id:
@@ -101,6 +108,17 @@ async def _create_subscription_from_payload(
     title_chinese = payload.title_chinese or details.get("title_chinese")
     total_episodes = payload.total_episodes or details.get("total_episodes") or 12
 
+    anime_for_series = {
+        "title_chinese": title_chinese,
+        "title_romaji": title_romaji,
+        "title_native": title_native,
+        "format": details.get("format") if details else None,
+        "season": payload.season or details.get("season"),
+        "season_year": payload.season_year or details.get("season_year"),
+        "total_episodes": total_episodes,
+    }
+    series_meta = await series_resolver.resolve(anime_for_series)
+
     subscription = Subscription(
         bangumi_id=payload.bangumi_id or details.get("bangumi_id"),
         anilist_id=payload.anilist_id or details.get("anilist_id"),
@@ -110,7 +128,9 @@ async def _create_subscription_from_payload(
         season_year=payload.season_year or details.get("season_year"),
         season=payload.season or details.get("season"),
         total_episodes=total_episodes or None,
-        local_folder_name=title_chinese or title_romaji,
+        local_folder_name=series_meta.series_title,
+        series_title=series_meta.series_title,
+        season_number=series_meta.season_number,
         auto_download_enabled=True,
         source=source,
         rss_source_id=getattr(payload, "rss_source_id", None),
@@ -355,7 +375,7 @@ async def list_episodes(
         if ep.torrent_candidates:
             try:
                 import json
-                candidates = json.loads(ep.torrent_candidates)
+                candidates = json.loads(cast(str, ep.torrent_candidates))
             except json.JSONDecodeError:
                 pass
         output.append({
@@ -402,7 +422,7 @@ async def get_episode_detail(episode_id: int, db: AsyncSession = Depends(get_db)
     if episode.torrent_candidates:
         try:
             import json
-            candidates = json.loads(episode.torrent_candidates)
+            candidates = json.loads(cast(str, episode.torrent_candidates))
         except json.JSONDecodeError:
             pass
 
@@ -410,7 +430,7 @@ async def get_episode_detail(episode_id: int, db: AsyncSession = Depends(get_db)
     if episode.torrent_failed_hashes:
         try:
             import json
-            failed_hashes = json.loads(episode.torrent_failed_hashes)
+            failed_hashes = json.loads(cast(str, episode.torrent_failed_hashes))
         except json.JSONDecodeError:
             pass
 
@@ -491,9 +511,54 @@ async def submit_human_input(
     return episode
 
 
+@app.get("/api/anime/lookup", response_model=AnimeLookupResponse)
+async def anime_lookup(
+    source: str,
+    id: int,  # noqa: A002
+) -> AnimeLookupResponse:
+    """Look up anime metadata by Bangumi or AniList ID."""
+    if source == "bangumi":
+        tool = BangumiTool()
+        result = await tool.invoke(BangumiToolInput(action="details", subject_id=id))
+        if not result.success:
+            raise HTTPException(status_code=502, detail=result.error)
+        subject = result.data.get("subject", {})
+        return AnimeLookupResponse(
+            bangumi_id=subject.get("bangumi_id"),
+            title_romaji=subject.get("title_romaji"),
+            title_native=subject.get("title_native"),
+            title_chinese=subject.get("title_chinese"),
+            title_english=subject.get("title_english"),
+            format=subject.get("format"),
+            total_episodes=subject.get("total_episodes"),
+            season=subject.get("season"),
+            season_year=subject.get("season_year"),
+        )
+    if source == "anilist":
+        tool = AniListTool()
+        result = await tool.invoke(AniListToolInput(action="details", media_id=id))
+        if not result.success:
+            raise HTTPException(status_code=502, detail=result.error)
+        media = result.data.get("media", {})
+        return AnimeLookupResponse(
+            anilist_id=media.get("anilist_id"),
+            title_romaji=media.get("title_romaji"),
+            title_native=media.get("title_native"),
+            title_english=media.get("title_english"),
+            format=media.get("format"),
+            total_episodes=media.get("total_episodes"),
+            season=media.get("season"),
+            season_year=media.get("season_year"),
+        )
+    raise HTTPException(status_code=400, detail=f"Unsupported source: {source}")
+
+
 @app.get("/api/discovery/season")
 async def discovery_season(
-    year: int, season: str, apply_filters: bool = True
+    year: int,
+    season: str,
+    apply_filters: bool = True,
+    search: str | None = None,
 ) -> list[dict[str, Any]]:
     """Return seasonal anime, using Bangumi (Chinese titles) as primary source."""
     resolver = MetadataResolver()
@@ -502,6 +567,17 @@ async def discovery_season(
         raise HTTPException(status_code=502, detail=result.error)
 
     media = cast(list[dict[str, Any]], result.data.get("candidates", []))
+
+    if search:
+        s = search.lower()
+        media = [
+            anime
+            for anime in media
+            if s in (anime.get("title_chinese") or "").lower()
+            or s in (anime.get("title_native") or "").lower()
+            or s in (anime.get("title_romaji") or "").lower()
+            or s in (anime.get("title_english") or "").lower()
+        ]
 
     # Best-effort enrichment: if we fell back to AniList, try to backfill
     # Chinese titles and bangumi_id from Bangumi search.
@@ -647,6 +723,53 @@ async def delete_rss_source(source_id: int, db: AsyncSession = Depends(get_db)) 
         raise HTTPException(status_code=404, detail="RSS source not found")
 
     await store.rss_sources.delete(source)
+    return Response(status_code=204)
+
+
+@app.get("/api/auto-subscribe-rules", response_model=list[AutoSubscribeRuleResponse])
+async def list_auto_subscribe_rules(db: AsyncSession = Depends(get_db)) -> list[AutoSubscribeRule]:
+    """Return all auto-subscribe rules."""
+    store = Store(db)
+    return await store.auto_subscribe_rules.list_all()
+
+
+@app.post("/api/auto-subscribe-rules", response_model=AutoSubscribeRuleResponse, status_code=201)
+async def create_auto_subscribe_rule(
+    payload: AutoSubscribeRuleCreateRequest, db: AsyncSession = Depends(get_db)
+) -> AutoSubscribeRule:
+    """Create a new auto-subscribe rule."""
+    store = Store(db)
+    rule = AutoSubscribeRule(**payload.model_dump())
+    return await store.auto_subscribe_rules.create(rule)
+
+
+@app.patch("/api/auto-subscribe-rules/{rule_id}", response_model=AutoSubscribeRuleResponse)
+async def update_auto_subscribe_rule(
+    rule_id: int,
+    payload: AutoSubscribeRuleUpdateRequest,
+    db: AsyncSession = Depends(get_db),
+) -> AutoSubscribeRule:
+    """Update an auto-subscribe rule."""
+    store = Store(db)
+    rule = await store.auto_subscribe_rules.get_by_id(rule_id)
+    if rule is None:
+        raise HTTPException(status_code=404, detail="Rule not found")
+
+    for field, value in payload.model_dump(exclude_unset=True).items():
+        setattr(rule, field, value)
+
+    return await store.auto_subscribe_rules.update(rule)
+
+
+@app.delete("/api/auto-subscribe-rules/{rule_id}", status_code=204)
+async def delete_auto_subscribe_rule(rule_id: int, db: AsyncSession = Depends(get_db)) -> Response:
+    """Delete an auto-subscribe rule."""
+    store = Store(db)
+    rule = await store.auto_subscribe_rules.get_by_id(rule_id)
+    if rule is None:
+        raise HTTPException(status_code=404, detail="Rule not found")
+
+    await store.auto_subscribe_rules.delete(rule)
     return Response(status_code=204)
 
 

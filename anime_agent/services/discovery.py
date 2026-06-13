@@ -9,9 +9,14 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from anime_agent.config import Settings, get_settings
 from anime_agent.memory.models import Episode, Subscription, TaskSchedule
 from anime_agent.memory.store import Store
+from anime_agent.services.auto_subscribe_llm_filter import (
+    AutoSubscribeLLMFilter,
+    AutoSubscribeRuleMatcher,
+)
 from anime_agent.services.content_filter import ContentFilter, FilterRules
 from anime_agent.services.episode_planner import EpisodePlanner
 from anime_agent.services.metadata_resolver import MetadataResolver
+from anime_agent.services.series_metadata_resolver import SeriesMetadataResolver
 
 
 class DiscoveryService:
@@ -27,6 +32,7 @@ class DiscoveryService:
     ):
         self.store = Store(session)
         self.resolver = resolver or MetadataResolver()
+        self.series_resolver = SeriesMetadataResolver()
         self.planner = planner or EpisodePlanner()
         self.settings = settings or get_settings()
         self.filter_service = filter_service or ContentFilter(
@@ -53,6 +59,11 @@ class DiscoveryService:
         candidates = result.data.get("candidates", [])
         created_count = 0
         filtered_count = 0
+        auto_subscribed = 0
+
+        rules = await self.store.auto_subscribe_rules.list_enabled()
+        matcher = AutoSubscribeRuleMatcher(rules)
+        llm_filter = AutoSubscribeLLMFilter()
 
         for anime in candidates:
             filter_result = self.filter_service.apply(anime)
@@ -63,6 +74,23 @@ class DiscoveryService:
             if await self._is_duplicate(anime):
                 continue
 
+            matched_rules = matcher.matches(anime)
+            if matched_rules:
+                subscribe = True
+                if any(rule.use_llm for rule in matched_rules):
+                    decision = await llm_filter.decide(anime)
+                    subscribe = decision == "subscribe"
+                    if decision == "human_review":
+                        logger.info(
+                            "LLM requests human review for auto-subscribe candidate {}",
+                            anime.get("title_romaji"),
+                        )
+                if subscribe:
+                    await self._create_subscription(anime)
+                    auto_subscribed += 1
+                    created_count += 1
+                continue
+
             if self.settings.filter_auto_subscribe_new_season:
                 await self._create_subscription(anime)
                 created_count += 1
@@ -70,6 +98,7 @@ class DiscoveryService:
         return {
             "created": created_count,
             "filtered": filtered_count,
+            "auto_subscribed": auto_subscribed,
             "total": len(candidates),
         }
 
@@ -103,6 +132,7 @@ class DiscoveryService:
 
     async def _create_subscription(self, anime: dict[str, Any]) -> Subscription:
         total = self._infer_total_episodes(anime)
+        series_meta = await self.series_resolver.resolve(anime)
         subscription = Subscription(
             bangumi_id=anime.get("bangumi_id"),
             anilist_id=anime.get("anilist_id"),
@@ -112,7 +142,9 @@ class DiscoveryService:
             season_year=anime.get("season_year"),
             season=anime.get("season"),
             total_episodes=total,
-            local_folder_name=anime.get("title_chinese") or anime.get("title_romaji") or "Unknown",
+            local_folder_name=series_meta.series_title,
+            series_title=series_meta.series_title,
+            season_number=series_meta.season_number,
             source="auto_discover",
             auto_download_enabled=True,
             expected_airing_weekday=self._infer_weekday(anime.get("air_date")),

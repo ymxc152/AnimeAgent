@@ -97,6 +97,19 @@ export interface DiscoveryAnime {
   filter_reason: string | null
 }
 
+export interface AnimeLookup {
+  bangumi_id: number | null
+  anilist_id: number | null
+  title_romaji: string | null
+  title_native: string | null
+  title_chinese: string | null
+  title_english: string | null
+  format: string | null
+  total_episodes: number | null
+  season_year: number | null
+  season: string | null
+}
+
 export interface HumanInputRequest {
   action: 'approve' | 'reject'
   torrent_link?: string | null
@@ -129,3 +142,34 @@ export interface RSSSourceUpdateRequest {
   parser_rules?: string | null
   is_active?: boolean | null
 }
+
+export interface AutoSubscribeRule {
+  id: number
+  name: string
+  include_genres: string | null
+  exclude_genres: string | null
+  include_formats: string | null
+  exclude_formats: string | null
+  include_keywords: string | null
+  exclude_keywords: string | null
+  min_score: number | null
+  use_llm: boolean
+  enabled: boolean
+  created_at: string | null
+  updated_at: string | null
+}
+
+export interface AutoSubscribeRuleCreateRequest {
+  name: string
+  include_genres?: string | null
+  exclude_genres?: string | null
+  include_formats?: string | null
+  exclude_formats?: string | null
+  include_keywords?: string | null
+  exclude_keywords?: string | null
+  min_score?: number | null
+  use_llm?: boolean
+  enabled?: boolean
+}
+
+export type AutoSubscribeRuleUpdateRequest = Partial<AutoSubscribeRuleCreateRequest>

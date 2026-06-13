@@ -1,5 +1,9 @@
 import axios, { AxiosError } from 'axios'
 import type {
+  AnimeLookup,
+  AutoSubscribeRule,
+  AutoSubscribeRuleCreateRequest,
+  AutoSubscribeRuleUpdateRequest,
   DiscoveryAnime,
   Episode,
   EpisodeDetail,
@@ -93,14 +97,20 @@ export async function submitHumanInput(
   return data
 }
 
+export async function lookupAnime(source: 'bangumi' | 'anilist', id: number): Promise<AnimeLookup> {
+  const { data } = await api.get('/anime/lookup', { params: { source, id } })
+  return data
+}
+
 export async function discoverySeason(
   year: number,
   season: string,
-  applyFilters = true
+  applyFilters = true,
+  search?: string
 ): Promise<DiscoveryAnime[]> {
-  const { data } = await api.get('/discovery/season', {
-    params: { year, season, apply_filters: applyFilters },
-  })
+  const params: Record<string, string | number | boolean> = { year, season, apply_filters: applyFilters }
+  if (search) params.search = search
+  const { data } = await api.get('/discovery/season', { params })
   return data
 }
 
@@ -139,4 +149,26 @@ export async function listLogs(limit = 100): Promise<string[]> {
 export async function getToolsHealth(): Promise<Record<string, ToolHealth>> {
   const { data } = await api.get('/tools/health')
   return data
+}
+
+export async function listAutoSubscribeRules(): Promise<AutoSubscribeRule[]> {
+  const { data } = await api.get('/auto-subscribe-rules')
+  return data
+}
+
+export async function createAutoSubscribeRule(payload: AutoSubscribeRuleCreateRequest): Promise<AutoSubscribeRule> {
+  const { data } = await api.post('/auto-subscribe-rules', payload)
+  return data
+}
+
+export async function updateAutoSubscribeRule(
+  id: number,
+  payload: AutoSubscribeRuleUpdateRequest
+): Promise<AutoSubscribeRule> {
+  const { data } = await api.patch(`/auto-subscribe-rules/${id}`, payload)
+  return data
+}
+
+export async function deleteAutoSubscribeRule(id: number): Promise<void> {
+  await api.delete(`/auto-subscribe-rules/${id}`)
 }

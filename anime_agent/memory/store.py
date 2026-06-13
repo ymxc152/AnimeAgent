@@ -7,7 +7,14 @@ from sqlalchemy import select, update
 from sqlalchemy.engine import CursorResult
 from sqlalchemy.ext.asyncio import AsyncSession
 
-from anime_agent.memory.models import Episode, RSSSource, Subscription, TaskSchedule, UserRequest
+from anime_agent.memory.models import (
+    AutoSubscribeRule,
+    Episode,
+    RSSSource,
+    Subscription,
+    TaskSchedule,
+    UserRequest,
+)
 
 
 class SubscriptionStore:
@@ -203,6 +210,45 @@ class RSSSourceStore:
         await self.session.commit()
 
 
+class AutoSubscribeRuleStore:
+    """Data access for auto-subscribe rules."""
+
+    def __init__(self, session: AsyncSession):
+        self.session = session
+
+    async def create(self, rule: AutoSubscribeRule) -> AutoSubscribeRule:
+        self.session.add(rule)
+        await self.session.commit()
+        await self.session.refresh(rule)
+        return rule
+
+    async def get_by_id(self, rule_id: int) -> AutoSubscribeRule | None:
+        return await self.session.get(AutoSubscribeRule, rule_id)
+
+    async def list_all(self) -> list[AutoSubscribeRule]:
+        result = await self.session.execute(
+            select(AutoSubscribeRule).order_by(AutoSubscribeRule.created_at.desc())
+        )
+        return list(result.scalars().all())
+
+    async def list_enabled(self) -> list[AutoSubscribeRule]:
+        result = await self.session.execute(
+            select(AutoSubscribeRule)
+            .where(AutoSubscribeRule.enabled.is_(True))
+            .order_by(AutoSubscribeRule.created_at.desc())
+        )
+        return list(result.scalars().all())
+
+    async def update(self, rule: AutoSubscribeRule) -> AutoSubscribeRule:
+        await self.session.commit()
+        await self.session.refresh(rule)
+        return rule
+
+    async def delete(self, rule: AutoSubscribeRule) -> None:
+        await self.session.delete(rule)
+        await self.session.commit()
+
+
 class Store:
     """Combined store facade."""
 
@@ -212,6 +258,7 @@ class Store:
         self.schedules = TaskScheduleStore(session)
         self.user_requests = UserRequestStore(session)
         self.rss_sources = RSSSourceStore(session)
+        self.auto_subscribe_rules = AutoSubscribeRuleStore(session)
 
     async def __aenter__(self) -> "Store":
         return self

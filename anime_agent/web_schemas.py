@@ -68,6 +68,21 @@ class DiscoverySubscribeRequest(BaseModel):
     rss_source_id: int | None = None
 
 
+class AnimeLookupResponse(BaseModel):
+    """Anime metadata looked up by external ID."""
+
+    bangumi_id: int | None = None
+    anilist_id: int | None = None
+    title_romaji: str | None = None
+    title_native: str | None = None
+    title_chinese: str | None = None
+    title_english: str | None = None
+    format: str | None = None
+    total_episodes: int | None = None
+    season: str | None = None
+    season_year: int | None = None
+
+
 class HumanInputRequest(BaseModel):
     """Payload to provide human approval for a low-confidence match."""
 
@@ -103,6 +118,56 @@ class RSSSourceUpdateRequest(BaseModel):
     url: str | None = None
     parser_rules: str | None = None
     is_active: bool | None = None
+
+
+class AutoSubscribeRuleResponse(BaseModel):
+    """Serialized auto-subscribe rule."""
+
+    model_config = ConfigDict(from_attributes=True)
+
+    id: int
+    name: str
+    include_genres: str | None
+    exclude_genres: str | None
+    include_formats: str | None
+    exclude_formats: str | None
+    include_keywords: str | None
+    exclude_keywords: str | None
+    min_score: float | None
+    use_llm: bool
+    enabled: bool
+    created_at: datetime | None
+    updated_at: datetime | None
+
+
+class AutoSubscribeRuleCreateRequest(BaseModel):
+    """Payload to create an auto-subscribe rule."""
+
+    name: str
+    include_genres: str | None = None
+    exclude_genres: str | None = None
+    include_formats: str | None = None
+    exclude_formats: str | None = None
+    include_keywords: str | None = None
+    exclude_keywords: str | None = None
+    min_score: float | None = None
+    use_llm: bool = False
+    enabled: bool = True
+
+
+class AutoSubscribeRuleUpdateRequest(BaseModel):
+    """Payload to update an auto-subscribe rule."""
+
+    name: str | None = None
+    include_genres: str | None = None
+    exclude_genres: str | None = None
+    include_formats: str | None = None
+    exclude_formats: str | None = None
+    include_keywords: str | None = None
+    exclude_keywords: str | None = None
+    min_score: float | None = None
+    use_llm: bool | None = None
+    enabled: bool | None = None
 
 
 class EpisodeResponse(BaseModel):

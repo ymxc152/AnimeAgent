@@ -55,6 +55,7 @@ class OrganizeFilesNode:
             or state.get("title_native")
             or "Unknown"
         )
+        series_title = state.get("series_title") or self._derive_series_title(title)
         episode = state.get("episode_number", 0)
         season = state.get("season", 1)
 
@@ -82,7 +83,7 @@ class OrganizeFilesNode:
         organized_paths: list[str] = []
         errors: list[str] = []
         for src_path in video_files:
-            dst = self._build_destination(title, season, episode, src_path.suffix)
+            dst = self._build_destination(series_title, season, episode, src_path.suffix)
 
             created = await self.fs_tool.invoke(
                 FileSystemToolInput(action="create_dir", dst=str(dst.parent))
@@ -119,11 +120,10 @@ class OrganizeFilesNode:
             result["errors"] = errors
         return result
 
-    def _build_destination(self, title: str, season: int, episode: int, ext: str) -> Path:
+    def _build_destination(self, series_title: str, season: int, episode: int, ext: str) -> Path:
         """Build the destination path from the configured template."""
-        series_title = self._derive_series_title(title)
         filename = self.template.format(
-            title=title,
+            title=series_title,
             series_title=series_title,
             season=season,
             episode=episode,

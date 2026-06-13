@@ -10,6 +10,7 @@ from loguru import logger
 from sqlalchemy.ext.asyncio import AsyncSession, async_sessionmaker
 
 from anime_agent.agents.episode.graph import build_episode_graph
+from anime_agent.agents.episode.nodes.organize_files import OrganizeFilesNode
 from anime_agent.agents.episode.state import EpisodeAgentState
 from anime_agent.config import settings
 from anime_agent.memory.models import Episode, Subscription, TaskSchedule
@@ -104,7 +105,8 @@ class EpisodeGraphRunner:
             title_romaji=cast(str, subscription.title_romaji),
             title_native=cast(str, subscription.title_native or ""),
             title_chinese=cast(str | None, subscription.title_chinese),
-            season=self._parse_season(getattr(subscription, "season", None)),
+            series_title=self._resolve_series_title(subscription),
+            season=self._resolve_season(subscription),
             bangumi_data={},
             anilist_data={},
             tmdb_data=None,
@@ -139,6 +141,27 @@ class EpisodeGraphRunner:
             return int(raw or 1)
         except (ValueError, TypeError):
             return 1
+
+    @staticmethod
+    def _resolve_series_title(subscription: Subscription) -> str:
+        """Use the stored series title or fall back to deriving it from titles."""
+        if getattr(subscription, "series_title", None):
+            return cast(str, subscription.series_title)
+        title = (
+            cast(str | None, subscription.title_chinese)
+            or cast(str | None, subscription.title_romaji)
+            or cast(str | None, subscription.title_native)
+            or "Unknown"
+        )
+        return OrganizeFilesNode._derive_series_title(title)
+
+    @staticmethod
+    def _resolve_season(subscription: Subscription) -> int:
+        """Use the stored numeric season or fall back to parsing the season column."""
+        stored = getattr(subscription, "season_number", None)
+        if stored is not None:
+            return cast(int, stored)
+        return EpisodeGraphRunner._parse_season(getattr(subscription, "season", None))
 
     @staticmethod
     def _map_remote_path(remote_path: str | None) -> str | None:

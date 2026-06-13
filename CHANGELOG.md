@@ -20,6 +20,16 @@
 - `AnimeGardenTool` 补齐配置项（base URL、timeout、cache TTL），实现 1 小时内存缓存；`search_resources` 支持 fallback 开关与多页搜索
 - Episode Graph 新增 `process_metadata`（内容分类）与 `notify_user`（通知推送）节点
 
+### Improved (Frontend Experience)
+- 首页 `/api/subscriptions` 改为单次 JOIN 聚合查询，消除 N+1
+- Dashboard 健康检查改为首次加载 + 手动刷新；统计卡片可点击跳转
+- 新增 `usePolling` hook，Dashboard/Subscriptions/Episodes 每 5s 自动刷新，标签页隐藏时暂停
+- 状态标签中文化；剧集卡片显示下载进度条与速度
+- 剧集支持状态多选筛选与详情弹窗（种子、hash、路径、错误日志、候选）
+- 发现页支持中文/日文/罗马音/英文后端搜索与自动订阅规则管理
+- RSS 源管理改为弹窗 CRUD
+- 新增 Toast 成功提示、Episodes 筛选 URL 同步、RSS/Logs 自动刷新、骨架屏、前端测试覆盖
+
 ### Known Limitations
 - 对话层（自然语言聊天订阅）尚未实现
 - 完结检测服务已实现但尚未接入 Scheduler

@@ -34,7 +34,9 @@ class Subscription(Base):
     season_year = Column(Integer)
     season = Column(String)  # WINTER/SPRING/SUMMER/FALL
     total_episodes = Column(Integer)
-    local_folder_name = Column(String)
+    local_folder_name = Column(String)  # Deprecated: use series_title instead.
+    series_title = Column(String)  # Base series name, without season/sequel suffixes.
+    season_number = Column(Integer, default=1)  # Numeric season (1, 2, ...) for file organization.
     status = Column(String, default="ongoing")  # ongoing/completed/dropped
     source = Column(String, default="manual")  # manual / auto_discover
     auto_download_enabled = Column(Boolean, default=True)
@@ -126,6 +128,26 @@ class RSSSource(Base):
     url = Column(String, nullable=False)
     parser_rules = Column(Text)
     is_active = Column(Boolean, default=True)
+
+
+class AutoSubscribeRule(Base):
+    """Rule for automatically subscribing to discovered seasonal anime."""
+
+    __tablename__ = "auto_subscribe_rules"
+
+    id = Column(Integer, primary_key=True)
+    name = Column(String, nullable=False)
+    include_genres = Column(Text)  # comma-separated
+    exclude_genres = Column(Text)
+    include_formats = Column(Text)
+    exclude_formats = Column(Text)
+    include_keywords = Column(Text)
+    exclude_keywords = Column(Text)
+    min_score = Column(Float)
+    use_llm = Column(Boolean, default=False)
+    enabled = Column(Boolean, default=True)
+    created_at = Column(DateTime, default=datetime.utcnow)
+    updated_at = Column(DateTime, default=datetime.utcnow, onupdate=datetime.utcnow)
 
 
 class SystemConfig(Base):

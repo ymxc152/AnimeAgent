@@ -3,13 +3,15 @@ import {
   createSubscription,
   deleteSubscription,
   listSubscriptions,
+  lookupAnime,
   refreshSubscriptionMetadata,
   updateSubscription,
 } from '../api/client'
 import type { Subscription, SubscriptionCreateRequest } from '../types'
 import { useI18n } from '../i18n/useI18n'
 import { usePolling } from '../hooks/usePolling'
-import { Card, Button, Input, Switch, Badge, Loading, EmptyState, Modal } from '../components/ui'
+import { useToast } from '../hooks/useToast'
+import { Card, Button, Input, Switch, Badge, Loading, EmptyState, Modal, Select } from '../components/ui'
 import { Plus, Trash2, ListVideo, RefreshCw } from 'lucide-react'
 
 const POLL_INTERVAL = 5000
@@ -32,12 +34,16 @@ const EMPTY_FORM: SubscriptionCreateRequest = {
 
 export function Subscriptions() {
   const { t } = useI18n()
+  const { showToast } = useToast()
   const [subscriptions, setSubscriptions] = useState<Subscription[]>([])
   const [loading, setLoading] = useState(true)
   const [refreshing, setRefreshing] = useState<Set<number>>(new Set())
   const [error, setError] = useState<string | null>(null)
   const [showModal, setShowModal] = useState(false)
   const [form, setForm] = useState<SubscriptionCreateRequest>(EMPTY_FORM)
+  const [lookupSource, setLookupSource] = useState<'bangumi' | 'anilist'>('bangumi')
+  const [lookupId, setLookupId] = useState('')
+  const [lookingUp, setLookingUp] = useState(false)
 
   const load = useCallback(async () => {
     setLoading(true)
@@ -65,6 +71,29 @@ export function Subscriptions() {
       await load()
     } catch (err) {
       setError(err instanceof Error ? err.message : t.subscriptions.createError)
+    }
+  }
+
+  async function handleLookup() {
+    const id = Number(lookupId)
+    if (!id) return
+    setLookingUp(true)
+    try {
+      const anime = await lookupAnime(lookupSource, id)
+      setForm({
+        ...form,
+        bangumi_id: lookupSource === 'bangumi' ? id : anime.bangumi_id,
+        anilist_id: lookupSource === 'anilist' ? id : anime.anilist_id,
+        title_romaji: anime.title_romaji || form.title_romaji,
+        title_native: anime.title_native || form.title_native,
+        title_chinese: anime.title_chinese || form.title_chinese,
+        total_episodes: anime.total_episodes || form.total_episodes,
+      })
+      showToast(t.subscriptions.lookupSuccess)
+    } catch (err) {
+      setError(err instanceof Error ? err.message : t.common.error)
+    } finally {
+      setLookingUp(false)
     }
   }
 
@@ -235,6 +264,37 @@ export function Subscriptions() {
           }
         >
           <form onSubmit={handleSubmit} className="grid grid-cols-1 gap-4">
+            <div className="rounded-xl border border-slate-100 bg-slate-50/50 p-3 dark:border-slate-800 dark:bg-slate-800/30">
+              <p className="mb-2 text-xs font-medium text-slate-500 dark:text-slate-400">
+                {t.subscriptions.searchById}
+              </p>
+              <div className="flex items-end gap-2">
+                <Select
+                  options={[
+                    { value: 'bangumi', label: 'Bangumi' },
+                    { value: 'anilist', label: 'AniList' },
+                  ]}
+                  value={lookupSource}
+                  onChange={(e) => setLookupSource(e.target.value as 'bangumi' | 'anilist')}
+                  className="!w-32"
+                />
+                <Input
+                  type="number"
+                  placeholder={t.subscriptions.idPlaceholder}
+                  value={lookupId}
+                  onChange={(e) => setLookupId(e.target.value)}
+                  className="flex-1"
+                />
+                <Button
+                  variant="secondary"
+                  onClick={handleLookup}
+                  isLoading={lookingUp}
+                  disabled={!lookupId}
+                >
+                  {t.subscriptions.lookup}
+                </Button>
+              </div>
+            </div>
             <Input
               placeholder={t.subscriptions.form.romajiTitle}
               value={form.title_romaji}
