@@ -39,10 +39,12 @@ async def test_selector_prefilters_by_episode_number():
     )
 
     assert result.success is True
-    # Pre-filter should keep episode 1 and maybe 10 (ambiguous), but not 2
+    # Pre-filter should keep episode 1 only; episode 2 and 10 must be rejected.
     passed = result.data.get("prefiltered", [])
     titles = {c["title"] for c in passed}
+    assert "[Sub] Anime - 01 [1080p].mkv" in titles
     assert "[Sub] Anime - 02 [1080p].mkv" not in titles
+    assert "[Sub] Anime - 10 [1080p].mkv" not in titles
 
 
 async def test_selector_returns_llm_match():

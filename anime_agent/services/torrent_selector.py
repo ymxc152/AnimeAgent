@@ -34,7 +34,11 @@ class TorrentSelector:
         if not prefiltered:
             return ToolOutput(
                 success=True,
-                data={"matched": False, "reason": "No candidates after episode-number filter"},
+                data={
+                    "matched": False,
+                    "reason": "No candidates after episode-number filter",
+                    "prefiltered": [],
+                },
             )
 
         if self.llm_tool is None:
@@ -83,6 +87,7 @@ class TorrentSelector:
                 "link": matched.get("link"),
                 "confidence": confidence,
                 "reason": json_data.get("reason", ""),
+                "prefiltered": prefiltered,
             },
         )
 
@@ -151,6 +156,7 @@ class TorrentSelector:
                 "link": best.get("link"),
                 "confidence": 0.5,
                 "reason": "Heuristic fallback: largest file",
+                "prefiltered": candidates,
             },
         )
 
