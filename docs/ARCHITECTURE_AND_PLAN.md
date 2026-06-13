@@ -29,14 +29,14 @@
 
 ### 测试现状
 
-- **pytest**：`247 selected, 244 passed, 3 failed, 14 deselected`。失败集中在 `match_torrent` 低置信度/人工审批逻辑。
+- **pytest**：`247 selected, 243 passed, 4 failed, 14 deselected`。失败集中在 `match_torrent` 低置信度/人工审批逻辑，以及 `test_web/test_frontend.py` 前端构建产物缺失。
 - **Ruff**：27 个 lint 错误，主要在测试文件（重复导入、未使用变量等）。
 - **MyPy**：10 个类型错误，集中在 `animes_garden_tool.py` 签名、`llm_tool.py` 正则、`web.py` SQLAlchemy Column 类型传递、`runner.py` 状态赋值。
 - 这些错误会导致 CI 无法通过，建议优先修复。
 
 ### 明显 Bug 与代码问题
 
-1. **`match_torrent` 低置信度处理未实现（导致 3 个测试失败）**
+1. **`match_torrent` 低置信度处理未实现（导致 3 个测试失败；另加 1 个前端测试失败）**
    - 位置：`anime_agent/agents/episode/nodes/match_torrent.py:79-88`
    - 现象：当 LLM 置信度 `< 0.5` 时直接返回 `status="no_match"`，未递增 `low_confidence_count`，也未在累计 3 次后返回 `human_review`。
    - 影响：人工断点失效；架构 §8.4 / §8.10 的流程未落地。
@@ -82,7 +82,12 @@
     - `config.py` / `.env.example` 未包含 `OLD_ANIME_DOWNLOAD_DESIGN.md` 规划的 `ANIME_GARDEN_*`、`RESOURCE_FALLBACK_*`、`RESOURCE_SEARCH_MAX_PAGES`。
     - `AnimeGardenTool` 未实现 1 小时关键词缓存。
 
-12. **MyPy / Ruff 失败项**
+12. **前端构建产物缺失导致 `test_root_serves_frontend_index` 失败**
+    - 位置：`tests/test_web/test_frontend.py:7`
+    - 现象：`web.py` 仅在 `frontend/dist` 存在时才挂载静态文件；当前 dist 目录为空/不存在，导致 `GET /` 返回 404。
+    - 建议：CI 中增加 `npm run build` 步骤，或测试时跳过/ mock 静态文件挂载。
+
+13. **MyPy / Ruff 失败项**
     - 详见「测试现状」。这些不是功能 bug，但阻塞 CI，应作为代码债处理。
 
 ### 与文档规划的主要偏差
@@ -99,7 +104,7 @@
 
 ### 后续建议优先级
 
-- **P0**：修复 `match_torrent` 低置信度逻辑，使 3 个测试通过；清理测试文件 lint 错误；修复 MyPy 类型错误。
+- **P0**：修复 `match_torrent` 低置信度逻辑；确保 `frontend/dist` 存在或通过 CI 构建前端，使 4 个测试通过；清理测试文件 lint 错误；修复 MyPy 类型错误。
 - **P1**：统一 `torrent_hash` / `torrent_info_hash`；`OrganizeFilesNode` 使用 Subscription 真实季数；`PollDownloadNode` 接入 `TorrentHealth`。
 - **P2**：Discovery 改为 Bangumi 优先；Scheduler 增加播出时间门控与错峰调度；实现 `process_metadata` 与 `notify_user` 节点。
 - **P3**：实现最小对话层；按 OLD 设计补齐 Anime Garden 缓存、配置项与 StatusQueryService。

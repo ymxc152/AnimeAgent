@@ -1,0 +1,16 @@
+# Normalize line endings to LF in the repository
+* text=auto eol=lf
+
+# Ensure shell scripts and batch files keep their native line endings
+*.sh text eol=lf
+*.bat text eol=crlf
+*.cmd text eol=crlf
+
+# Binary files
+*.png binary
+*.jpg binary
+*.jpeg binary
+*.gif binary
+*.ico binary
+*.svg binary
+*.db binary

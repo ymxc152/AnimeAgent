@@ -198,7 +198,7 @@ anime-agent/
 
 ## ⚠️ 已知问题
 
-- **pytest**：`247 selected, 244 passed, 3 failed`，失败集中在 `match_torrent` 低置信度/人工审批逻辑。
+- **pytest**：`247 selected, 243 passed, 4 failed`，失败集中在 `match_torrent` 低置信度/人工审批逻辑，以及 `frontend/dist` 构建产物缺失导致的前端测试失败。
 - **Ruff**：27 个 lint 错误，主要在测试文件。
 - **MyPy**：10 个类型错误，集中在 `animes_garden_tool.py`、`llm_tool.py`、`web.py`、`runner.py`。
 - 完整 Bug 清单与修复优先级见 [`docs/ARCHITECTURE_AND_PLAN.md`](./docs/ARCHITECTURE_AND_PLAN.md)。
