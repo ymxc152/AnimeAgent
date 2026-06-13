@@ -41,15 +41,7 @@ class CompletionChecker:
                 reason="All episodes downloaded",
             )
 
-        # External status explicit FINISHED
-        if external_status == "FINISHED" and all_completed:
-            return CompletionResult(
-                is_completed=True,
-                all_episodes_completed=True,
-                reason="External status FINISHED and all episodes complete",
-            )
-
-        # Finished airing but not all downloaded -> not completed
+        # External status explicit FINISHED but not all episodes downloaded
         if external_status == "FINISHED":
             return CompletionResult(
                 is_completed=False,
