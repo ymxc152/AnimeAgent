@@ -137,11 +137,15 @@ class EpisodeGraphRunner:
         """Write terminal graph state back to the database."""
         self._set(episode, "status", final.get("status", episode.status))
         self._set(episode, "torrent_candidates", json.dumps(final.get("torrent_candidates", [])))
-        self._set(episode, "torrent_hash", final.get("torrent_hash"))
+        # Use the actual qBittorrent hash as the single source of truth.
+        # Keep torrent_info_hash in sync for backward compatibility until a
+        # future migration removes the redundant column.
+        hash_value = final.get("torrent_hash") or (final.get("matched_torrent") or {}).get("info_hash")
+        self._set(episode, "torrent_hash", hash_value)
+        self._set(episode, "torrent_info_hash", hash_value)
         self._set(episode, "torrent_name", final.get("torrent_name"))
         matched = final.get("matched_torrent") or {}
         self._set(episode, "torrent_title", matched.get("title"))
-        self._set(episode, "torrent_info_hash", matched.get("info_hash"))
         self._set(episode, "torrent_link", matched.get("link"))
         self._set(episode, "download_path", self._first_file(final.get("download_files", [])))
         self._set(episode, "organized_path", final.get("organized_path"))
