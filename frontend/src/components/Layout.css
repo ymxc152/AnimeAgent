@@ -1,0 +1,183 @@
+:root {
+  --bg: #f5f5f5;
+  --card-bg: #ffffff;
+  --primary: #3b82f6;
+  --primary-text: #ffffff;
+  --danger: #ef4444;
+  --success: #22c55e;
+  --warning: #f59e0b;
+  --text: #1f2937;
+  --muted: #6b7280;
+  --border: #e5e7eb;
+}
+
+* {
+  box-sizing: border-box;
+}
+
+body {
+  margin: 0;
+  font-family: system-ui, -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
+  background: var(--bg);
+  color: var(--text);
+}
+
+.app-header {
+  background: var(--card-bg);
+  border-bottom: 1px solid var(--border);
+  padding: 1rem 2rem;
+}
+
+.app-title {
+  color: var(--text);
+  text-decoration: none;
+}
+
+.app-header h1 {
+  margin: 0 0 0.75rem;
+  font-size: 1.5rem;
+}
+
+.app-nav {
+  display: flex;
+  gap: 0.5rem;
+  flex-wrap: wrap;
+}
+
+.app-nav a {
+  background: transparent;
+  border: 1px solid var(--border);
+  padding: 0.5rem 1rem;
+  border-radius: 0.375rem;
+  cursor: pointer;
+  color: var(--text);
+  text-decoration: none;
+}
+
+.app-nav a.active,
+.app-nav a:hover {
+  background: var(--primary);
+  border-color: var(--primary);
+  color: var(--primary-text);
+}
+
+.app-main {
+  padding: 2rem;
+  max-width: 1200px;
+  margin: 0 auto;
+}
+
+.cards {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(200px, 1fr));
+  gap: 1rem;
+  margin-bottom: 1.5rem;
+}
+
+.card {
+  background: var(--card-bg);
+  border: 1px solid var(--border);
+  border-radius: 0.5rem;
+  padding: 1rem;
+}
+
+.card h3 {
+  margin-top: 0;
+}
+
+.inline-form {
+  display: flex;
+  gap: 0.5rem;
+  margin-bottom: 1rem;
+  flex-wrap: wrap;
+  align-items: flex-end;
+}
+
+.inline-form input,
+.inline-form select,
+.inline-form button {
+  padding: 0.5rem;
+  border: 1px solid var(--border);
+  border-radius: 0.375rem;
+}
+
+.inline-form button {
+  background: var(--primary);
+  color: var(--primary-text);
+  border-color: var(--primary);
+  cursor: pointer;
+}
+
+.list {
+  display: flex;
+  flex-direction: column;
+  gap: 0.5rem;
+}
+
+.list-item {
+  background: var(--card-bg);
+  border: 1px solid var(--border);
+  border-radius: 0.5rem;
+  padding: 0.75rem 1rem;
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  gap: 1rem;
+  flex-wrap: wrap;
+}
+
+.list-item.healthy {
+  border-left: 4px solid var(--success);
+}
+
+.list-item.unhealthy {
+  border-left: 4px solid var(--danger);
+}
+
+.badge {
+  font-size: 0.75rem;
+  color: var(--muted);
+}
+
+.error {
+  color: var(--danger);
+}
+
+button.delete {
+  background: var(--danger);
+  color: var(--primary-text);
+  border: none;
+  padding: 0.375rem 0.75rem;
+  border-radius: 0.375rem;
+  cursor: pointer;
+}
+
+button.secondary {
+  background: transparent;
+  border: 1px solid var(--border);
+  color: var(--text);
+  padding: 0.375rem 0.75rem;
+  border-radius: 0.375rem;
+  cursor: pointer;
+}
+
+button.small {
+  padding: 0.25rem 0.5rem;
+  font-size: 0.875rem;
+}
+
+.status-completed {
+  color: var(--success);
+}
+
+.status-failed {
+  color: var(--danger);
+}
+
+.status-pending {
+  color: var(--muted);
+}
+
+.status-human_review {
+  color: var(--warning);
+}

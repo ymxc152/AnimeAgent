@@ -1,0 +1,90 @@
+# ─────────────────────────────────────────────────────────────
+# AnimeAgent — Git ignore rules
+# 说明：以下文件/目录属于本地环境、敏感信息、构建产物或运行时数据，
+#       不应提交到 GitHub。需要保留模板的已使用 *.example 形式。
+# ─────────────────────────────────────────────────────────────
+
+# Secrets & local environment
+.env
+.env.*
+!.env.example
+
+# Python
+__pycache__/
+*.py[cod]
+*$py.class
+*.so
+.Python
+build/
+develop-eggs/
+dist/
+downloads/
+eggs/
+.eggs/
+lib/
+lib64/
+parts/
+sdist/
+var/
+wheels/
+*.egg-info/
+.installed.cfg
+*.egg
+
+# Virtual environments
+.venv/
+venv/
+ENV/
+env/
+
+# IDE / Editor
+.vscode/
+.idea/
+*.swp
+*.swo
+*~
+.DS_Store
+
+# Claude / local agent settings
+.claude/
+
+# Database & runtime data
+*.db
+*.db-journal
+*.sqlite
+*.sqlite3
+
+# Logs
+logs/
+*.log
+
+# Coverage & test artifacts
+.coverage
+coverage.xml
+htmlcov/
+.pytest_cache/
+.mypy_cache/
+.ruff_cache/
+.dmypy.json
+dmypy.json
+.pre-commit-cache/
+
+# Frontend
+frontend/node_modules/
+frontend/dist/
+frontend/dist-ssr/
+frontend/logs/
+*.local
+
+# Debug / ad-hoc payload files (运行/测试时生成的临时 JSON/TXT)
+*_payload*.json
+ep_status*.json
+ep_status*.txt
+episode_status.json
+human_input.*
+nyaa_entries.json
+rss_*.txt
+torrent_title.txt
+
+# Build / lock artifacts (保留 uv.lock 作为依赖锁定，忽略其他)
+# uv.lock 已纳入版本控制，请勿忽略

@@ -1,0 +1,235 @@
+import { useCallback, useEffect, useState } from 'react'
+import {
+  createSubscription,
+  deleteSubscription,
+  listSubscriptions,
+  refreshSubscriptionMetadata,
+  updateSubscription,
+} from '../api/client'
+import type { Subscription, SubscriptionCreateRequest } from '../types'
+import { useI18n } from '../i18n/useI18n'
+import { Card, Button, Input, Switch, Badge, Loading, EmptyState } from '../components/ui'
+import { Plus, Trash2, ListVideo, RefreshCw } from 'lucide-react'
+
+export function Subscriptions() {
+  const { t } = useI18n()
+  const [subscriptions, setSubscriptions] = useState<Subscription[]>([])
+  const [loading, setLoading] = useState(true)
+  const [refreshing, setRefreshing] = useState<Set<number>>(new Set())
+  const [error, setError] = useState<string | null>(null)
+  const [form, setForm] = useState<SubscriptionCreateRequest>({
+    title_romaji: '',
+    title_chinese: '',
+    total_episodes: 12,
+    auto_download_enabled: true,
+  })
+
+   
+  const load = useCallback(async () => {
+    setLoading(true)
+    try {
+      const subsData = await listSubscriptions()
+      setSubscriptions(subsData)
+      setError(null)
+    } catch (err) {
+      setError(err instanceof Error ? err.message : 'Failed to load')
+    } finally {
+      setLoading(false)
+    }
+  }, [])
+
+  // eslint-disable-next-line react-hooks/set-state-in-effect -- initial data load
+  useEffect(() => { void load() }, [load])
+
+  async function handleSubmit(e: React.FormEvent) {
+    e.preventDefault()
+    try {
+      await createSubscription(form)
+      setForm({ title_romaji: '', title_chinese: '', total_episodes: 12, auto_download_enabled: true })
+      await load()
+    } catch (err) {
+      setError(err instanceof Error ? err.message : t.subscriptions.createError)
+    }
+  }
+
+  async function toggleAutoDownload(sub: Subscription) {
+    try {
+      await updateSubscription(sub.id, { auto_download_enabled: !sub.auto_download_enabled })
+      await load()
+    } catch (err) {
+      setError(err instanceof Error ? err.message : t.subscriptions.toggleError)
+    }
+  }
+
+  async function handleDelete(id: number) {
+    if (!confirm(t.subscriptions.deleteConfirm)) return
+    try {
+      await deleteSubscription(id)
+      await load()
+    } catch (err) {
+      setError(err instanceof Error ? err.message : t.subscriptions.deleteError)
+    }
+  }
+
+  async function handleRefresh(id: number) {
+    setRefreshing((prev) => new Set(prev).add(id))
+    try {
+      await refreshSubscriptionMetadata(id)
+      await load()
+    } catch (err) {
+      setError(err instanceof Error ? err.message : t.common.error)
+    } finally {
+      setRefreshing((prev) => {
+        const next = new Set(prev)
+        next.delete(id)
+        return next
+      })
+    }
+  }
+
+  if (loading) return <Loading message={t.common.loading} />
+
+  return (
+    <div className="space-y-8">
+      {/* Page header */}
+      <div>
+        <h1 className="text-2xl font-bold tracking-tight text-slate-900 dark:text-white">
+          {t.subscriptions.title}
+        </h1>
+      </div>
+
+      {/* Error banner */}
+      {error && (
+        <Card className="border-rose-200 bg-rose-50 dark:border-rose-800 dark:bg-rose-950/30">
+          <p className="text-sm text-rose-600 dark:text-rose-400">{error}</p>
+        </Card>
+      )}
+
+      {/* Add form */}
+      <Card>
+        <h2 className="mb-4 text-base font-semibold text-slate-900 dark:text-white">
+          {t.subscriptions.addTitle}
+        </h2>
+        <form onSubmit={handleSubmit} className="grid grid-cols-1 gap-4 sm:grid-cols-2 lg:grid-cols-4">
+          <Input
+            placeholder={t.subscriptions.form.romajiTitle}
+            value={form.title_romaji}
+            onChange={(e) => setForm({ ...form, title_romaji: e.target.value })}
+            required
+          />
+          <Input
+            placeholder={t.subscriptions.form.chineseTitle}
+            value={form.title_chinese || ''}
+            onChange={(e) => setForm({ ...form, title_chinese: e.target.value })}
+          />
+          <Input
+            type="number"
+            placeholder={t.subscriptions.form.totalEpisodes}
+            value={form.total_episodes ?? ''}
+            onChange={(e) => setForm({ ...form, total_episodes: Number(e.target.value) })}
+            required
+          />
+          <div className="flex items-end sm:col-span-2 lg:col-span-4">
+            <Button type="submit" variant="primary">
+              <Plus className="h-4 w-4" />
+              {t.common.add}
+            </Button>
+          </div>
+        </form>
+      </Card>
+
+      {/* Subscription list */}
+      {subscriptions.length === 0 ? (
+        <EmptyState
+          title={t.subscriptions.noSubscriptions}
+          icon={<ListVideo className="h-8 w-8" />}
+        />
+      ) : (
+        <div className="space-y-3">
+          {subscriptions.map((sub) => {
+            const total = sub.ep_total || sub.total_episodes || 0
+            const downloaded = sub.ep_downloaded
+            const failed = sub.ep_failed
+            const pending = sub.ep_pending
+            const progressPct = total > 0 ? Math.round((downloaded / total) * 100) : 0
+
+            return (
+              <Card key={sub.id} hover>
+                <div className="flex flex-col gap-4 sm:flex-row sm:items-center sm:justify-between">
+                  <div className="min-w-0 flex-1">
+                    <div className="flex items-center gap-2">
+                      <h3 className="truncate text-base font-semibold text-slate-900 dark:text-white">
+                        {sub.title_chinese || sub.title_native || sub.title_romaji}
+                      </h3>
+                      <Badge variant={sub.status === 'ongoing' ? 'primary' : sub.status === 'completed' ? 'success' : 'muted'}>
+                        {sub.status}
+                      </Badge>
+                    </div>
+                    {(sub.title_native || sub.title_romaji) && (sub.title_chinese || sub.title_native) && (
+                      <p className="mt-0.5 truncate text-sm text-slate-500 dark:text-slate-400">
+                        {sub.title_native || sub.title_romaji}
+                      </p>
+                    )}
+                    {/* Episode progress */}
+                    <div className="mt-3 flex items-center gap-3">
+                      <div className="flex-1">
+                        <div className="flex items-center justify-between text-xs text-slate-500 dark:text-slate-400 mb-1">
+                          <span>{t.subscriptions.progress}</span>
+                          <span>{t.subscriptions.episodeProgress.replace('{downloaded}', String(downloaded)).replace('{total}', String(total))}</span>
+                        </div>
+                        <div className="h-2 w-full overflow-hidden rounded-full bg-slate-100 dark:bg-slate-800">
+                          <div
+                            className="h-full rounded-full bg-gradient-to-r from-indigo-500 to-violet-500 transition-all duration-500"
+                            style={{ width: `${progressPct}%` }}
+                          />
+                        </div>
+                      </div>
+                      <div className="flex shrink-0 items-center gap-2">
+                        {failed > 0 && (
+                          <Badge variant="danger" size="sm">
+                            {t.subscriptions.failed} {failed}
+                          </Badge>
+                        )}
+                        {pending > 0 && (
+                          <Badge variant="muted" size="sm">
+                            {t.subscriptions.pending} {pending}
+                          </Badge>
+                        )}
+                      </div>
+                    </div>
+                  </div>
+                  <div className="flex items-center gap-4">
+                    <Switch
+                      checked={sub.auto_download_enabled}
+                      onChange={() => toggleAutoDownload(sub)}
+                      label={t.subscriptions.form.autoDownload}
+                    />
+                    {!sub.title_chinese && (
+                      <Button
+                        variant="secondary"
+                        size="sm"
+                        onClick={() => handleRefresh(sub.id)}
+                        isLoading={refreshing.has(sub.id)}
+                      >
+                        <RefreshCw className="h-3.5 w-3.5" />
+                        {t.subscriptions.refreshMetadata}
+                      </Button>
+                    )}
+                    <Button
+                      variant="danger"
+                      size="sm"
+                      onClick={() => handleDelete(sub.id)}
+                    >
+                      <Trash2 className="h-3.5 w-3.5" />
+                      {t.common.delete}
+                    </Button>
+                  </div>
+                </div>
+              </Card>
+            )
+          })}
+        </div>
+      )}
+    </div>
+  )
+}
