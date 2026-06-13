@@ -1,8 +1,7 @@
 """AnimeGarden resource search tool for anime torrent fallback."""
 
 import re
-from datetime import datetime, timezone
-from typing import Any
+from datetime import datetime
 
 import httpx
 
@@ -64,11 +63,20 @@ class AnimeGardenTool(BaseTool):
     def __init__(self, client: httpx.AsyncClient | None = None):
         self.client = client or httpx.AsyncClient(timeout=30.0)
 
-    async def invoke(self, input_data: AnimeGardenToolInput) -> ToolOutput:
+    async def invoke(self, input_data: ToolInput) -> ToolOutput:
         """Search for anime resources via Anime Garden API."""
+        if not isinstance(input_data, AnimeGardenToolInput):
+            return ToolOutput(
+                success=False,
+                error="Input must be AnimeGardenToolInput",
+            )
+
         try:
             url = f"{self.BASE_URL}/resources"
-            params = {"search": input_data.search, "page": input_data.page}
+            params: dict[str, str | int] = {
+                "search": input_data.search,
+                "page": input_data.page,
+            }
 
             response = await self.client.get(url, params=params)
             response.raise_for_status()

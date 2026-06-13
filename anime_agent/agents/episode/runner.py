@@ -85,7 +85,7 @@ class EpisodeGraphRunner:
         download_files: list[str] = [download_path] if download_path else []
 
         # Determine RSS source: prefer subscription's explicit source, fall back to default
-        rss_source_id = subscription.rss_source_id
+        rss_source_id = cast(int | None, subscription.rss_source_id)
         if rss_source_id is None:
             from anime_agent.config import settings
             if getattr(settings, "rss_default_url", None):

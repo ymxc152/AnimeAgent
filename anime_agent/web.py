@@ -5,7 +5,7 @@ from collections.abc import AsyncGenerator
 from contextlib import asynccontextmanager
 from datetime import UTC, datetime
 from pathlib import Path
-from typing import Any
+from typing import Any, cast
 
 from fastapi import Depends, FastAPI, HTTPException, Response
 from fastapi.middleware.cors import CORSMiddleware
@@ -20,7 +20,6 @@ from anime_agent.memory.init_db import init_database
 from anime_agent.memory.models import Episode, RSSSource, Subscription
 from anime_agent.memory.store import Store
 from anime_agent.services.content_filter import ContentFilter, FilterRules
-from anime_agent.services.episode_planner import EpisodePlanner
 from anime_agent.services.metadata_resolver import MetadataResolver
 from anime_agent.tools.anilist_tool import AniListTool, AniListToolInput
 from anime_agent.tools.bangumi_tool import BangumiTool, BangumiToolInput
@@ -264,14 +263,17 @@ async def refresh_subscription_metadata(
     details: dict[str, Any] = {}
 
     try:
-        if subscription.bangumi_id or subscription.anilist_id:
+        bangumi_id = cast(int | None, subscription.bangumi_id)
+        anilist_id = cast(int | None, subscription.anilist_id)
+        title_romaji = cast(str | None, subscription.title_romaji)
+        if bangumi_id or anilist_id:
             result = await resolver.get_details(
-                bangumi_id=subscription.bangumi_id, anilist_id=subscription.anilist_id
+                bangumi_id=bangumi_id, anilist_id=anilist_id
             )
             if result.success:
                 details = result.data.get("details", {})
-        elif subscription.title_romaji:
-            search_result = await resolver.search(subscription.title_romaji)
+        elif title_romaji:
+            search_result = await resolver.search(title_romaji)
             if search_result.success and search_result.data.get("candidates"):
                 details = search_result.data["candidates"][0]
     except Exception as exc:  # noqa: BLE001
@@ -327,17 +329,17 @@ async def list_episodes(
     episodes = list(result.scalars().all())
 
     # Batch-load subscription titles
-    sub_ids = {ep.subscription_id for ep in episodes}
+    sub_ids = {cast(int, ep.subscription_id) for ep in episodes}
     subs: dict[int, Subscription] = {}
     if sub_ids:
         sub_result = await db.execute(
             select(Subscription).where(Subscription.id.in_(sub_ids))
         )
-        subs = {s.id: s for s in sub_result.scalars().all()}
+        subs = {cast(int, s.id): s for s in sub_result.scalars().all()}
 
     output: list[dict[str, Any]] = []
     for ep in episodes:
-        sub = subs.get(ep.subscription_id)
+        sub = subs.get(cast(int, ep.subscription_id))
         output.append({
             "id": ep.id,
             "subscription_id": ep.subscription_id,

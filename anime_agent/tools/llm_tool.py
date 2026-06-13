@@ -61,7 +61,17 @@ class LLMTool(BaseTool):
 
         try:
             response = await model.ainvoke(messages)
-            content = response.content
+            raw_content = response.content
+
+            # Normalize content to a single string for downstream processing.
+            if isinstance(raw_content, str):
+                content = raw_content
+            elif isinstance(raw_content, list):
+                content = "".join(
+                    str(part) for part in raw_content
+                )
+            else:
+                content = str(raw_content)
 
             # If json_schema requested, try to parse JSON from the response
             if llm_input.json_schema:
