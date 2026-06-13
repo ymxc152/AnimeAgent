@@ -1,10 +1,34 @@
-import { useCallback, useEffect, useState } from 'react'
-import { listEpisodes, listSubscriptions, retryEpisode, submitHumanInput } from '../api/client'
-import type { Episode, Subscription } from '../types'
+import { useCallback, useEffect, useMemo, useState } from 'react'
+import {
+  getEpisodeDetail,
+  listEpisodes,
+  listSubscriptions,
+  retryEpisode,
+  submitHumanInput,
+} from '../api/client'
+import type { Episode, EpisodeDetail, Subscription } from '../types'
 import { useI18n } from '../i18n/useI18n'
 import { usePolling } from '../hooks/usePolling'
-import { Card, Button, Input, Select, Badge, Loading, EmptyState } from '../components/ui'
-import { PlayCircle, RefreshCw, CheckCircle2, XCircle, AlertTriangle } from 'lucide-react'
+import {
+  Card,
+  Button,
+  Input,
+  Select,
+  Badge,
+  Loading,
+  EmptyState,
+  Modal,
+  MultiSelect,
+} from '../components/ui'
+import {
+  PlayCircle,
+  RefreshCw,
+  CheckCircle2,
+  XCircle,
+  AlertTriangle,
+  Info,
+  Download,
+} from 'lucide-react'
 
 const POLL_INTERVAL = 5000
 
@@ -24,24 +48,42 @@ const STATUS_BADGE_VARIANT: Record<string, 'success' | 'danger' | 'warning' | 'i
   low_confidence: 'warning',
 }
 
+function formatSpeed(kbps: number): string {
+  if (kbps <= 0) return ''
+  if (kbps < 1024) return `${kbps.toFixed(1)} KB/s`
+  return `${(kbps / 1024).toFixed(2)} MB/s`
+}
+
+function parseTorrentProgress(status: string | null): number {
+  // Very rough estimate based on qBittorrent state strings.
+  if (!status) return 0
+  if (status.includes('UP')) return 100
+  if (status.includes('metadata')) return 5
+  if (status.includes('stalledDL')) return 40
+  if (status.includes('downloading')) return 60
+  return 30
+}
+
 export function Episodes() {
   const { t } = useI18n()
   const [episodes, setEpisodes] = useState<Episode[]>([])
   const [subscriptions, setSubscriptions] = useState<Subscription[]>([])
   const [subscriptionId, setSubscriptionId] = useState<string>('')
-  const [statusFilter, setStatusFilter] = useState<string>('')
+  const [statusFilter, setStatusFilter] = useState<string[]>([])
   const [loading, setLoading] = useState(true)
   const [error, setError] = useState<string | null>(null)
   const [humanInput, setHumanInput] = useState<Record<number, string>>({})
+  const [detailId, setDetailId] = useState<number | null>(null)
+  const [detail, setDetail] = useState<EpisodeDetail | null>(null)
+  const [detailLoading, setDetailLoading] = useState(false)
 
-   
   const load = useCallback(async () => {
     setLoading(true)
     try {
       const [epsData, subsData] = await Promise.all([
         listEpisodes(
           subscriptionId ? Number(subscriptionId) : undefined,
-          statusFilter || undefined
+          statusFilter.length > 0 ? statusFilter : undefined
         ),
         listSubscriptions(),
       ])
@@ -55,10 +97,20 @@ export function Episodes() {
     }
   }, [subscriptionId, statusFilter])
 
-  // eslint-disable-next-line react-hooks/set-state-in-effect -- initial data load
   useEffect(() => { void load() }, [load])
-
   usePolling(load, POLL_INTERVAL)
+
+  useEffect(() => {
+    if (detailId === null) {
+      setDetail(null)
+      return
+    }
+    setDetailLoading(true)
+    getEpisodeDetail(detailId)
+      .then(setDetail)
+      .catch((err) => setError(err instanceof Error ? err.message : t.common.error))
+      .finally(() => setDetailLoading(false))
+  }, [detailId, t.common.error])
 
   async function handleRetry(id: number) {
     try {
@@ -90,16 +142,19 @@ export function Episodes() {
     })),
   ]
 
-  const statusOptions = [
-    { value: '', label: t.episodes.filters.allStatuses },
-    { value: 'pending', label: t.episodes.statuses.pending },
-    { value: 'fetching', label: t.episodes.statuses.fetching },
-    { value: 'matched', label: t.episodes.statuses.matched },
-    { value: 'downloading', label: t.episodes.statuses.downloading },
-    { value: 'completed', label: t.episodes.statuses.completed },
-    { value: 'failed', label: t.episodes.statuses.failed },
-    { value: 'human_review', label: t.episodes.statuses.human_review },
-  ]
+  const statusOptions = useMemo(
+    () => [
+      { value: 'pending', label: t.episodes.statuses.pending },
+      { value: 'fetching', label: t.episodes.statuses.fetching },
+      { value: 'matched', label: t.episodes.statuses.matched },
+      { value: 'downloading', label: t.episodes.statuses.downloading },
+      { value: 'completed', label: t.episodes.statuses.completed },
+      { value: 'failed', label: t.episodes.statuses.failed },
+      { value: 'human_review', label: t.episodes.statuses.human_review },
+      { value: 'waiting_for_rss', label: t.episodes.statuses.waiting_for_rss },
+    ],
+    [t.episodes.statuses]
+  )
 
   return (
     <div className="space-y-8">
@@ -126,17 +181,18 @@ export function Episodes() {
             value={subscriptionId}
             onChange={(e) => setSubscriptionId(e.target.value)}
           />
-          <Select
+          <MultiSelect
             label={t.episodes.filters.status}
             options={statusOptions}
             value={statusFilter}
-            onChange={(e) => setStatusFilter(e.target.value)}
+            onChange={setStatusFilter}
+            placeholder={t.episodes.filters.allStatuses}
           />
         </div>
       </Card>
 
       {/* Episode list */}
-      {loading ? (
+      {loading && episodes.length === 0 ? (
         <Loading message={t.common.loading} />
       ) : episodes.length === 0 ? (
         <EmptyState
@@ -146,7 +202,12 @@ export function Episodes() {
       ) : (
         <div className="space-y-3">
           {episodes.map((ep) => (
-            <Card key={ep.id} hover>
+            <Card
+              key={ep.id}
+              hover
+              onClick={() => setDetailId(ep.id)}
+              className="cursor-pointer"
+            >
               <div className="flex flex-col gap-4 sm:flex-row sm:items-start sm:justify-between">
                 <div className="min-w-0 flex-1 space-y-2">
                   {ep.subscription_title && (
@@ -165,6 +226,25 @@ export function Episodes() {
                   <p className="text-xs text-slate-400 dark:text-slate-500">
                     {t.episodes.statusHelp[ep.status as keyof typeof t.episodes.statusHelp] || ''}
                   </p>
+
+                  {ep.status === 'downloading' && (
+                    <div className="space-y-1">
+                      <div className="flex items-center justify-between text-xs text-slate-500 dark:text-slate-400">
+                        <span className="flex items-center gap-1">
+                          <Download className="h-3 w-3" />
+                          {formatSpeed(ep.torrent_last_speed)}
+                        </span>
+                        <span>{parseTorrentProgress(ep.torrent_status)}%</span>
+                      </div>
+                      <div className="h-2 w-full overflow-hidden rounded-full bg-slate-100 dark:bg-slate-800">
+                        <div
+                          className="h-full rounded-full bg-gradient-to-r from-sky-500 to-cyan-500 transition-all duration-500"
+                          style={{ width: `${parseTorrentProgress(ep.torrent_status)}%` }}
+                        />
+                      </div>
+                    </div>
+                  )}
+
                   {ep.torrent_title && (
                     <p className="truncate text-sm text-slate-500 dark:text-slate-400">
                       {ep.torrent_title}
@@ -178,7 +258,10 @@ export function Episodes() {
                   )}
                 </div>
 
-                <div className="flex shrink-0 items-center gap-2">
+                <div
+                  className="flex shrink-0 items-center gap-2"
+                  onClick={(e) => e.stopPropagation()}
+                >
                   {ep.status === 'failed' && (
                     <Button variant="secondary" size="sm" onClick={() => handleRetry(ep.id)}>
                       <RefreshCw className="h-3.5 w-3.5" />
@@ -219,6 +302,105 @@ export function Episodes() {
           ))}
         </div>
       )}
+
+      {/* Detail modal */}
+      {detailId !== null && (
+        <Modal
+          title={detail ? `${detail.subscription_title} · 第 ${detail.episode_number} 集详情` : t.episodes.title}
+          onClose={() => setDetailId(null)}
+          size="lg"
+        >
+          {detailLoading || !detail ? (
+            <Loading message={t.common.loading} />
+          ) : (
+            <div className="space-y-5">
+              <div className="flex flex-wrap items-center gap-2">
+                <Badge variant={STATUS_BADGE_VARIANT[detail.status] || 'muted'}>
+                  {t.episodes.statuses[detail.status as keyof typeof t.episodes.statuses] || detail.status}
+                </Badge>
+                {detail.content_type && (
+                  <Badge variant="muted">{detail.content_type}</Badge>
+                )}
+              </div>
+
+              <DetailSection title="种子信息" icon={<Download className="h-4 w-4" />}>
+                <DetailRow label="种子标题" value={detail.torrent_title} />
+                <DetailRow label="种子名称" value={detail.torrent_name} />
+                <DetailRow label="Info Hash" value={detail.torrent_info_hash || detail.torrent_hash} />
+                <DetailRow label="qB 状态" value={detail.torrent_status} />
+                <DetailRow label="下载速度" value={formatSpeed(detail.torrent_last_speed)} />
+                <DetailRow label="候选数量" value={String(detail.torrent_candidates_count)} />
+              </DetailSection>
+
+              <DetailSection title="路径" icon={<Info className="h-4 w-4" />}>
+                <DetailRow label="下载路径" value={detail.download_path} />
+                <DetailRow label="整理路径" value={detail.organized_path} />
+              </DetailSection>
+
+              {detail.torrent_failed_hashes.length > 0 && (
+                <DetailSection title="已失败 Hash" icon={<AlertTriangle className="h-4 w-4" />}>
+                  <ul className="list-inside list-disc space-y-1 text-sm text-slate-600 dark:text-slate-400">
+                    {detail.torrent_failed_hashes.map((h) => (
+                      <li key={h} className="break-all">{h}</li>
+                    ))}
+                  </ul>
+                </DetailSection>
+              )}
+
+              {detail.error_log && (
+                <DetailSection title="错误日志" icon={<AlertTriangle className="h-4 w-4 text-rose-500" />}>
+                  <p className="whitespace-pre-wrap rounded-lg bg-rose-50 px-3 py-2 text-sm text-rose-600 dark:bg-rose-950/20 dark:text-rose-400">
+                    {detail.error_log}
+                  </p>
+                </DetailSection>
+              )}
+
+              {detail.torrent_candidates.length > 0 && (
+                <DetailSection title="候选种子" icon={<Info className="h-4 w-4" />}>
+                  <div className="max-h-48 overflow-y-auto space-y-2">
+                    {detail.torrent_candidates.slice(0, 20).map((c, idx) => (
+                      <div
+                        key={idx}
+                        className="rounded-lg border border-slate-100 p-2 text-sm dark:border-slate-800"
+                      >
+                        <p className="font-medium text-slate-800 dark:text-slate-200">
+                          {(c as { title?: string }).title || 'Unknown'}
+                        </p>
+                        <p className="text-xs text-slate-500 dark:text-slate-400 break-all">
+                          {(c as { info_hash?: string }).info_hash || 'no hash'}
+                        </p>
+                      </div>
+                    ))}
+                  </div>
+                </DetailSection>
+              )}
+            </div>
+          )}
+        </Modal>
+      )}
+    </div>
+  )
+}
+
+function DetailSection({ title, icon, children }: { title: string; icon: React.ReactNode; children: React.ReactNode }) {
+  return (
+    <div className="space-y-2">
+      <h4 className="flex items-center gap-2 text-sm font-semibold text-slate-800 dark:text-slate-200">
+        {icon}
+        {title}
+      </h4>
+      <div className="pl-6">{children}</div>
+    </div>
+  )
+}
+
+function DetailRow({ label, value }: { label: string; value: string | null }) {
+  return (
+    <div className="grid grid-cols-3 gap-2 text-sm">
+      <span className="text-slate-500 dark:text-slate-400">{label}</span>
+      <span className="col-span-2 break-all text-slate-800 dark:text-slate-200">
+        {value || '-'}
+      </span>
     </div>
   )
 }

@@ -34,13 +34,26 @@ export interface Episode {
   status: string
   content_type: string
   torrent_hash: string | null
+  torrent_info_hash: string | null
   torrent_title: string | null
+  torrent_name: string | null
+  torrent_link: string | null
+  torrent_status: string | null
+  torrent_last_speed: number
+  torrent_added_at: string | null
+  torrent_checked_at: string | null
   download_path: string | null
   organized_path: string | null
   metadata_verified: boolean
   error_log: string | null
+  torrent_candidates_count: number
   created_at: string | null
   updated_at: string | null
+}
+
+export interface EpisodeDetail extends Episode {
+  torrent_candidates: Array<Record<string, unknown>>
+  torrent_failed_hashes: string[]
 }
 
 export interface RSSSource {

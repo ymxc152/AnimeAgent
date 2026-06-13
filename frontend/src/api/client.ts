@@ -2,6 +2,7 @@ import axios, { AxiosError } from 'axios'
 import type {
   DiscoveryAnime,
   Episode,
+  EpisodeDetail,
   HumanInputRequest,
   RSSSource,
   RSSSourceCreateRequest,
@@ -66,11 +67,16 @@ export async function refreshSubscriptionMetadata(id: number): Promise<Subscript
   return data
 }
 
-export async function listEpisodes(subscriptionId?: number, status?: string): Promise<Episode[]> {
+export async function listEpisodes(subscriptionId?: number, status?: string[]): Promise<Episode[]> {
   const params: Record<string, string | number> = {}
   if (subscriptionId !== undefined) params.subscription_id = subscriptionId
-  if (status) params.status = status
+  if (status && status.length > 0) params.status = status.join(',')
   const { data } = await api.get('/episodes', { params })
+  return data
+}
+
+export async function getEpisodeDetail(id: number): Promise<EpisodeDetail> {
+  const { data } = await api.get(`/episodes/${id}`)
   return data
 }
 

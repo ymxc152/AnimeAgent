@@ -25,6 +25,7 @@ from anime_agent.tools.bangumi_tool import BangumiTool, BangumiToolInput
 from anime_agent.tools.base import BaseTool
 from anime_agent.web_schemas import (
     DiscoverySubscribeRequest,
+    EpisodeDetailResponse,
     EpisodeResponse,
     HumanInputRequest,
     RSSSourceCreateRequest,
@@ -321,12 +322,19 @@ async def list_episodes(
     status: str | None = None,
     db: AsyncSession = Depends(get_db),
 ) -> list[dict[str, Any]]:
-    """Return episodes with subscription title, optionally filtered."""
+    """Return episodes with subscription title, optionally filtered.
+
+    ``status`` accepts a comma-separated list to allow multi-select filtering.
+    """
     query = select(Episode).order_by(Episode.subscription_id, Episode.episode_number)
     if subscription_id is not None:
         query = query.where(Episode.subscription_id == subscription_id)
-    if status is not None:
-        query = query.where(Episode.status == status)
+    if status:
+        statuses = [s.strip() for s in status.split(",") if s.strip()]
+        if len(statuses) == 1:
+            query = query.where(Episode.status == statuses[0])
+        elif statuses:
+            query = query.where(Episode.status.in_(statuses))
 
     result = await db.execute(query)
     episodes = list(result.scalars().all())
@@ -343,6 +351,13 @@ async def list_episodes(
     output: list[dict[str, Any]] = []
     for ep in episodes:
         sub = subs.get(cast(int, ep.subscription_id))
+        candidates = []
+        if ep.torrent_candidates:
+            try:
+                import json
+                candidates = json.loads(ep.torrent_candidates)
+            except json.JSONDecodeError:
+                pass
         output.append({
             "id": ep.id,
             "subscription_id": ep.subscription_id,
@@ -353,16 +368,80 @@ async def list_episodes(
             "status": ep.status,
             "content_type": ep.content_type,
             "torrent_hash": ep.torrent_hash,
+            "torrent_info_hash": ep.torrent_info_hash,
             "torrent_title": ep.torrent_title,
+            "torrent_name": ep.torrent_name,
+            "torrent_link": ep.torrent_link,
+            "torrent_status": ep.torrent_status,
+            "torrent_last_speed": ep.torrent_last_speed or 0.0,
+            "torrent_added_at": ep.torrent_added_at.isoformat() if ep.torrent_added_at else None,
+            "torrent_checked_at": ep.torrent_checked_at.isoformat() if ep.torrent_checked_at else None,
             "download_path": ep.download_path,
             "organized_path": ep.organized_path,
             "metadata_verified": ep.metadata_verified,
             "error_log": ep.error_log,
+            "torrent_candidates_count": len(candidates),
             "created_at": ep.created_at.isoformat() if ep.created_at else None,
             "updated_at": ep.updated_at.isoformat() if ep.updated_at else None,
         })
 
     return output
+
+
+@app.get("/api/episodes/{episode_id}", response_model=EpisodeDetailResponse)
+async def get_episode_detail(episode_id: int, db: AsyncSession = Depends(get_db)) -> dict[str, Any]:
+    """Return full details for a single episode."""
+    episode = await db.get(Episode, episode_id)
+    if episode is None:
+        raise HTTPException(status_code=404, detail="Episode not found")
+
+    sub = await db.get(Subscription, cast(int, episode.subscription_id))
+    subscription_title = sub.title_chinese or sub.title_native or sub.title_romaji if sub else None
+
+    candidates: list[dict[str, Any]] = []
+    if episode.torrent_candidates:
+        try:
+            import json
+            candidates = json.loads(episode.torrent_candidates)
+        except json.JSONDecodeError:
+            pass
+
+    failed_hashes: list[str] = []
+    if episode.torrent_failed_hashes:
+        try:
+            import json
+            failed_hashes = json.loads(episode.torrent_failed_hashes)
+        except json.JSONDecodeError:
+            pass
+
+    return {
+        "id": episode.id,
+        "subscription_id": episode.subscription_id,
+        "subscription_title": subscription_title,
+        "episode_number": episode.episode_number,
+        "title": episode.title,
+        "aired_at": episode.aired_at.isoformat() if episode.aired_at else None,
+        "status": episode.status,
+        "content_type": episode.content_type,
+        "torrent_hash": episode.torrent_hash,
+        "torrent_info_hash": episode.torrent_info_hash,
+        "torrent_title": episode.torrent_title,
+        "torrent_name": episode.torrent_name,
+        "torrent_link": episode.torrent_link,
+        "torrent_status": episode.torrent_status,
+        "torrent_last_speed": episode.torrent_last_speed or 0.0,
+        "torrent_added_at": episode.torrent_added_at.isoformat() if episode.torrent_added_at else None,
+        "torrent_checked_at": episode.torrent_checked_at.isoformat() if episode.torrent_checked_at else None,
+        "download_path": episode.download_path,
+        "organized_path": episode.organized_path,
+        "metadata_verified": episode.metadata_verified,
+        "error_log": episode.error_log,
+        "torrent_candidates_count": len(candidates),
+        "torrent_candidates": candidates,
+        "torrent_failed_hashes": failed_hashes,
+        "created_at": episode.created_at.isoformat() if episode.created_at else None,
+        "updated_at": episode.updated_at.isoformat() if episode.updated_at else None,
+    }
 
 
 @app.post("/api/episodes/{episode_id}/retry", response_model=EpisodeResponse)

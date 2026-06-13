@@ -1,6 +1,7 @@
 """Pydantic schemas for the FastAPI web panel."""
 
 from datetime import datetime
+from typing import Any
 
 from pydantic import BaseModel, ConfigDict
 
@@ -118,10 +119,25 @@ class EpisodeResponse(BaseModel):
     status: str
     content_type: str
     torrent_hash: str | None
+    torrent_info_hash: str | None
     torrent_title: str | None
+    torrent_name: str | None
+    torrent_link: str | None
+    torrent_status: str | None
+    torrent_last_speed: float
+    torrent_added_at: datetime | None
+    torrent_checked_at: datetime | None
     download_path: str | None
     organized_path: str | None
     metadata_verified: bool
     error_log: str | None
+    torrent_candidates_count: int = 0
     created_at: datetime | None
     updated_at: datetime | None
+
+
+class EpisodeDetailResponse(EpisodeResponse):
+    """Full episode detail including candidate list and failed hashes."""
+
+    torrent_candidates: list[dict[str, Any]] = []
+    torrent_failed_hashes: list[str] = []
