@@ -69,6 +69,43 @@ async def test_bangumi_tool_gets_subject_details():
 
 
 @respx.mock
+async def test_bangumi_tool_seasonal_filters_calendar_by_year_and_season():
+    """BangumiTool seasonal should filter calendar results by air_date."""
+    api_response = [
+        {
+            "weekday": {"en": "Mon"},
+            "items": [
+                {
+                    "id": 1,
+                    "name": "Winter Show",
+                    "name_cn": "冬季番",
+                    "type": 2,
+                    "air_date": "2024-01-15",
+                },
+                {
+                    "id": 2,
+                    "name": "Spring Show",
+                    "name_cn": "春季番",
+                    "type": 2,
+                    "air_date": "2024-04-10",
+                },
+            ],
+        }
+    ]
+    route = respx.get("https://api.bgm.tv/calendar").mock(return_value=Response(200, json=api_response))
+
+    tool = BangumiTool()
+    result = await tool.invoke(BangumiToolInput(action="seasonal", year=2024, season="WINTER"))
+
+    assert result.success is True
+    assert route.called
+    subjects = result.data["subjects"]
+    assert len(subjects) == 1
+    assert subjects[0]["bangumi_id"] == 1
+    assert subjects[0]["title_chinese"] == "冬季番"
+
+
+@respx.mock
 async def test_bangumi_tool_returns_error_on_http_failure():
     """BangumiTool should return failed ToolOutput on HTTP errors."""
     respx.get("https://api.bgm.tv/search/subject/test").mock(return_value=Response(500))

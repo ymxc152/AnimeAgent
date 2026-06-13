@@ -21,7 +21,6 @@ from anime_agent.memory.models import Episode, RSSSource, Subscription
 from anime_agent.memory.store import Store
 from anime_agent.services.content_filter import ContentFilter, FilterRules
 from anime_agent.services.metadata_resolver import MetadataResolver
-from anime_agent.tools.anilist_tool import AniListTool, AniListToolInput
 from anime_agent.tools.bangumi_tool import BangumiTool, BangumiToolInput
 from anime_agent.tools.base import BaseTool
 from anime_agent.web_schemas import (
@@ -414,60 +413,22 @@ async def discovery_season(
     year: int, season: str, apply_filters: bool = True
 ) -> list[dict[str, Any]]:
     """Return seasonal anime, using Bangumi (Chinese titles) as primary source."""
-    season_upper = season.upper()
+    resolver = MetadataResolver()
+    result = await resolver.get_seasonal(year, season.upper())
+    if not result.success:
+        raise HTTPException(status_code=502, detail=result.error)
 
-    # Season date ranges for filtering Bangumi calendar results
-    season_months = {
-        "WINTER": (1, 3),
-        "SPRING": (4, 6),
-        "SUMMER": (7, 9),
-        "FALL": (10, 12),
-    }
-    months = season_months.get(season_upper, (1, 12))
+    media = cast(list[dict[str, Any]], result.data.get("candidates", []))
 
-    # Primary: Bangumi calendar (has Chinese titles)
-    media: list[dict[str, Any]] = []
-    try:
-        bgm = BangumiTool()
-        bgm_result = await bgm.invoke(BangumiToolInput(action="calendar"))
-        if bgm_result.success:
-            all_subjects = bgm_result.data.get("subjects", [])
-            # Filter by year and season
-            for subj in all_subjects:
-                air_date = subj.get("air_date", "")
-                if not air_date:
-                    continue
-                try:
-                    parts = air_date.split("-")
-                    air_year = int(parts[0])
-                    air_month = int(parts[1]) if len(parts) > 1 else 0
-                except (ValueError, IndexError):
-                    continue
-                if air_year == year and months[0] <= air_month <= months[1]:
-                    media.append(subj)
-    except Exception as exc:  # noqa: BLE001
-        logger.warning("Bangumi calendar failed, falling back to AniList: {}", exc)
-
-    # Fallback: AniList if Bangumi returned nothing
-    if not media:
-        anilist = AniListTool()
-        result = await anilist.invoke(
-            AniListToolInput(action="seasonal", year=year, season=season_upper)
-        )
-        if result.success:
-            media = result.data.get("media", [])
-        else:
-            raise HTTPException(status_code=502, detail=result.error)
-
-        # Enrich AniList results with Chinese titles from Bangumi
+    # Best-effort enrichment: if we fell back to AniList, try to backfill
+    # Chinese titles and bangumi_id from Bangumi search.
+    if result.data.get("source") == "anilist":
         bgm = BangumiTool()
         sem = asyncio.Semaphore(5)
 
         async def _search_bgm(anime: dict[str, Any]) -> None:
-            """Search Bangumi by title to fill Chinese title."""
-            if anime.get("title_chinese"):
+            if anime.get("title_chinese") and anime.get("bangumi_id"):
                 return
-            # Prefer native (Japanese) title — better match on Bangumi
             query = anime.get("title_native") or anime.get("title_romaji") or ""
             if not query:
                 return
@@ -476,8 +437,8 @@ async def discovery_season(
                     search_result = await bgm.invoke(BangumiToolInput(action="search", query=query))
                     if search_result.success and search_result.data.get("subjects"):
                         best = search_result.data["subjects"][0]
-                        anime["title_chinese"] = best.get("title_chinese")
-                        anime["bangumi_id"] = best.get("bangumi_id")
+                        anime.setdefault("title_chinese", best.get("title_chinese"))
+                        anime.setdefault("bangumi_id", best.get("bangumi_id"))
                 except Exception:  # noqa: BLE001
                     pass  # best-effort
 

@@ -47,7 +47,7 @@ class BangumiTool(BaseTool):
         if bgm_input.action == "calendar":
             return await self._calendar()
         if bgm_input.action == "seasonal":
-            return await self._seasonal()
+            return await self._seasonal(bgm_input.year, bgm_input.season)
 
         return ToolOutput(success=False, error=f"Unknown action: {bgm_input.action}")
 
@@ -101,15 +101,44 @@ class BangumiTool(BaseTool):
                 subjects.append(_normalize_subject(item))
         return ToolOutput(success=True, data={"subjects": subjects})
 
-    async def _seasonal(self) -> ToolOutput:
-        """Fetch seasonal anime by filtering calendar results by air_date."""
+    async def _seasonal(self, year: int | None = None, season: str | None = None) -> ToolOutput:
+        """Fetch seasonal anime by filtering calendar results by air_date.
+
+        Bangumi ``/calendar`` only returns the currently airing slate, so we
+        filter by the requested year and season months.  If no year/season is
+        provided, all calendar items are returned.
+        """
         calendar_result = await self._calendar()
         if not calendar_result.success:
             return calendar_result
 
         all_subjects = calendar_result.data.get("subjects", [])
-        # Return all calendar items — the caller can filter by season if needed
-        return ToolOutput(success=True, data={"subjects": all_subjects})
+        if year is None or season is None:
+            return ToolOutput(success=True, data={"subjects": all_subjects})
+
+        season_months = {
+            "WINTER": (1, 3),
+            "SPRING": (4, 6),
+            "SUMMER": (7, 9),
+            "FALL": (10, 12),
+        }
+        months = season_months.get(season.upper(), (1, 12))
+
+        filtered: list[dict[str, Any]] = []
+        for subject in all_subjects:
+            air_date = subject.get("air_date", "")
+            if not air_date:
+                continue
+            try:
+                parts = air_date.split("-")
+                air_year = int(parts[0])
+                air_month = int(parts[1]) if len(parts) > 1 else 0
+            except (ValueError, IndexError):
+                continue
+            if air_year == year and months[0] <= air_month <= months[1]:
+                filtered.append(subject)
+
+        return ToolOutput(success=True, data={"subjects": filtered})
 
 
 def _normalize_subject(item: dict[str, Any]) -> dict[str, Any]:
@@ -128,16 +157,32 @@ def _normalize_subject(item: dict[str, Any]) -> dict[str, Any]:
     eps = item.get("eps")
     total_episodes = int(eps) if eps is not None else None
 
+    # Map Bangumi platform/type hints to a generic format for filtering.
+    # Bangumi does not expose a direct "format" field like AniList, so we
+    # default to "TV" and only override for obvious OVA/movie cases.
+    platform = str(item.get("platform", "")).lower()
+    name_lower = name.lower()
+    if "movie" in platform or "剧场版" in name_lower:
+        format_value = "MOVIE"
+    elif "ova" in platform or "oav" in name_lower:
+        format_value = "OVA"
+    elif "ona" in platform:
+        format_value = "ONA"
+    else:
+        format_value = "TV"
+
     return {
         "bangumi_id": item.get("id"),
         "title_native": name,
         "title_chinese": title_chinese,
         "title_romaji": name if not name_cn else name,
         "type": item.get("type"),
+        "format": format_value,
         "air_date": item.get("air_date"),
         "total_episodes": total_episodes,
         "summary": item.get("summary", ""),
         "tags": tags,
+        "genres": tags,
         "image": item.get("images", {}).get("large")
         if isinstance(item.get("images"), dict)
         else None,

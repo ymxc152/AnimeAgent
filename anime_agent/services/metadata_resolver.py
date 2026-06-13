@@ -77,18 +77,26 @@ class MetadataResolver:
         return ToolOutput(success=True, data={"details": details})
 
     async def get_seasonal(self, year: int, season: str) -> ToolOutput:
-        """Fetch seasonal anime from AniList (Bangumi calendar not always reliable)."""
-        result = await self.anilist.invoke(
+        """Fetch seasonal anime with Bangumi priority and AniList fallback."""
+        bgm_result = await self.bangumi.invoke(
+            BangumiToolInput(action="seasonal", year=year, season=season)
+        )
+        if bgm_result.success and bgm_result.data.get("subjects"):
+            candidates = [_unify_bangumi_subject(s) for s in bgm_result.data["subjects"]]
+            return ToolOutput(success=True, data={"candidates": candidates, "source": "bangumi"})
+
+        anilist_result = await self.anilist.invoke(
             AniListToolInput(action="seasonal", year=year, season=season)
         )
-        if not result.success:
-            return result
-        candidates = [_unify_anilist_media(m) for m in result.data.get("media", [])]
+        if not anilist_result.success:
+            return anilist_result
+        candidates = [_unify_anilist_media(m) for m in anilist_result.data.get("media", [])]
         return ToolOutput(success=True, data={"candidates": candidates, "source": "anilist"})
 
 
 def _unify_bangumi_subject(subject: dict[str, Any]) -> dict[str, Any]:
     """Normalize Bangumi subject to unified metadata dict."""
+    tags = subject.get("tags", []) or []
     return {
         "bangumi_id": subject.get("bangumi_id"),
         "anilist_id": subject.get("anilist_id"),
@@ -100,7 +108,8 @@ def _unify_bangumi_subject(subject: dict[str, Any]) -> dict[str, Any]:
         "type": subject.get("type"),
         "air_date": subject.get("air_date"),
         "total_episodes": subject.get("total_episodes"),
-        "tags": subject.get("tags", []),
+        "tags": tags,
+        "genres": subject.get("genres", []) or tags,
         "image": subject.get("image"),
     }
 

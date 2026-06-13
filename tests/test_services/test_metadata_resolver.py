@@ -111,3 +111,40 @@ async def test_resolver_cross_references_anilist_for_bangumi_subject():
     assert details["anilist_id"] == 456
     assert details["title_chinese"] == "葬送的芙莉莲"
     assert details["title_english"] == "Frieren: Beyond Journey's End"
+
+
+async def test_resolver_get_seasonal_prefers_bangumi():
+    """Resolver should return Bangumi seasonal results when available."""
+    bangumi = AsyncMock()
+    bangumi.invoke.return_value = ToolOutput(
+        success=True, data={"subjects": [_bangumi_subject()]}
+    )
+    anilist = AsyncMock()
+
+    resolver = MetadataResolver(bangumi=bangumi, anilist=anilist)
+    result = await resolver.get_seasonal(2023, "FALL")
+
+    assert result.success is True
+    assert result.data["source"] == "bangumi"
+    assert len(result.data["candidates"]) == 1
+    assert result.data["candidates"][0]["bangumi_id"] == 123
+    bangumi.invoke.assert_awaited_once()
+    anilist.invoke.assert_not_awaited()
+
+
+async def test_resolver_get_seasonal_falls_back_to_anilist():
+    """Resolver should fallback to AniList when Bangumi seasonal returns empty."""
+    bangumi = AsyncMock()
+    bangumi.invoke.return_value = ToolOutput(success=True, data={"subjects": []})
+    anilist = AsyncMock()
+    anilist.invoke.return_value = ToolOutput(
+        success=True, data={"media": [_anilist_media()]}
+    )
+
+    resolver = MetadataResolver(bangumi=bangumi, anilist=anilist)
+    result = await resolver.get_seasonal(2023, "FALL")
+
+    assert result.success is True
+    assert result.data["source"] == "anilist"
+    assert len(result.data["candidates"]) == 1
+    assert result.data["candidates"][0]["anilist_id"] == 456
