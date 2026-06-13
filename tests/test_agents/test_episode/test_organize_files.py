@@ -126,3 +126,41 @@ async def test_organize_files_fails_when_no_video_files_found():
 
     assert result["status"] == "failed"
     assert "No video files found" in result["errors"][0]
+
+
+async def test_organize_files_strips_season_from_series_folder(tmp_path: Path):
+    """The top-level folder should use the series title without season suffixes."""
+    library = tmp_path / "library"
+    fs_tool = _fs_tool_for_success()
+
+    node = OrganizeFilesNode(
+        fs_tool=fs_tool,
+        library_path=str(library),
+    )
+    state = {
+        "subscription_id": 1,
+        "episode_number": 9,
+        "title_chinese": "复制品的我也会谈恋爱。 第二季",
+        "title_romaji": "Fukusei-gaeri no Koibito. Season 2",
+        "title_native": "",
+        "download_files": ["/downloads/ep09.mkv"],
+        "season": 2,
+    }
+    result = await node(state)
+
+    assert result["status"] == "organized"
+    assert result["organized_files"]
+    organized = result["organized_files"][0]
+    assert "复制品的我也会谈恋爱。" in organized
+    assert "第二季" not in organized.replace("复制品的我也会谈恋爱。", "")
+
+
+def test_derive_series_title_strips_common_season_suffixes():
+    """_derive_series_title should remove season/sequel markers."""
+    node = OrganizeFilesNode(fs_tool=AsyncMock())
+    assert node._derive_series_title("测试动画 第二季") == "测试动画"
+    assert node._derive_series_title("Test Anime Season 2") == "Test Anime"
+    assert node._derive_series_title("Test Anime 2nd Season") == "Test Anime"
+    assert node._derive_series_title("Test Anime S2") == "Test Anime"
+    assert node._derive_series_title("测试动画 第2期") == "测试动画"
+    assert node._derive_series_title("测试动画") == "测试动画"

@@ -1,5 +1,6 @@
 """organize_files node for Episode Graph."""
 
+import re
 from pathlib import Path
 from typing import Any
 
@@ -8,6 +9,22 @@ from anime_agent.tools.base import BaseTool
 from anime_agent.tools.filesystem_tool import FileSystemTool, FileSystemToolInput
 
 _VIDEO_EXTENSIONS = {".mkv", ".mp4", ".avi", ".mov", ".wmv", ".flv", ".webm"}
+
+# Suffixes that indicate a season/sequel and should be stripped from the
+# series-level folder/filename. Patterns are matched case-insensitively at the
+# end of the title.
+_SEASON_SUFFIX_PATTERNS = [
+    # Chinese: 第二季 / 第2季 / 2期 / 第2期
+    r"\s*第\s*[一二三四五六七八九十\d]+\s*季\s*$",
+    r"\s*第\s*[一二三四五六七八九十\d]+\s*期\s*$",
+    # English / Romaji: Season 2, 2nd Season, Second Season, S2
+    r"\s+season\s*\d+\s*$",
+    r"\s+\d+(?:st|nd|rd|th)\s+season\s*$",
+    r"\s+(?:first|second|third|fourth|fifth|sixth|seventh|eighth|ninth|tenth)\s+season\s*$",
+    r"\s+s\d+\s*$",
+    # Japanese style: 2nd Season, 2期
+    r"\s+\d+\s*期\s*$",
+]
 
 
 class OrganizeFilesNode:
@@ -104,10 +121,25 @@ class OrganizeFilesNode:
 
     def _build_destination(self, title: str, season: int, episode: int, ext: str) -> Path:
         """Build the destination path from the configured template."""
+        series_title = self._derive_series_title(title)
         filename = self.template.format(
             title=title,
+            series_title=series_title,
             season=season,
             episode=episode,
             ext=ext.lstrip("."),
         )
         return self.library_path / filename
+
+    @staticmethod
+    def _derive_series_title(title: str) -> str:
+        """Return the series-level title with season/sequel suffixes removed.
+
+        All seasons of the same series should share one top-level folder, so
+        titles like ``... 第二季`` or ``... Season 2`` are stripped back to the
+        base series name.
+        """
+        series_title = title
+        for pattern in _SEASON_SUFFIX_PATTERNS:
+            series_title = re.sub(pattern, "", series_title, flags=re.IGNORECASE)
+        return series_title.strip() or title.strip()

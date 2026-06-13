@@ -46,7 +46,7 @@ class Settings(BaseSettings):
 
     # Media library
     media_library_path: str = "C:\\Media\\Anime"
-    organize_template: str = "{title}\\{title} S{season:02d}E{episode:02d}.{ext}"
+    organize_template: str = "{series_title}\\Season{season:02d}\\S{season:02d}E{episode:02d}.{series_title}.{ext}"
 
     # System
     check_interval_seconds: int = 600
