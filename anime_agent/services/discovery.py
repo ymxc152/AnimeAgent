@@ -89,8 +89,20 @@ class DiscoveryService:
 
         return False
 
+    def _infer_total_episodes(self, anime: dict[str, Any]) -> int:
+        """Resolve total episodes, using metadata then format-aware defaults."""
+        total = anime.get("total_episodes")
+        if total:
+            return int(total)
+
+        fmt = (anime.get("format") or "").upper()
+        if fmt in {"MOVIE", "OVA", "ONA"}:
+            return 1
+
+        return self.settings.discovery_default_total_episodes
+
     async def _create_subscription(self, anime: dict[str, Any]) -> Subscription:
-        total = anime.get("total_episodes") or 12
+        total = self._infer_total_episodes(anime)
         subscription = Subscription(
             bangumi_id=anime.get("bangumi_id"),
             anilist_id=anime.get("anilist_id"),

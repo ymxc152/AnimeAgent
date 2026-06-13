@@ -63,6 +63,9 @@ class Settings(BaseSettings):
     filter_require_anime_type: bool = True
     filter_auto_subscribe_new_season: bool = True
 
+    # Discovery defaults
+    discovery_default_total_episodes: int = 12
+
     # Notifications
     apprise_urls: str = ""
 
