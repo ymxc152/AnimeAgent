@@ -202,10 +202,10 @@ class Scheduler:
         3. Otherwise allow processing (no gating information).
         """
         if episode.aired_at is not None:
-            aired_at = episode.aired_at
+            aired_at = cast(datetime, episode.aired_at)
             if aired_at.tzinfo is None:
                 aired_at = aired_at.replace(tzinfo=UTC)
-            return datetime.now(UTC) >= aired_at.astimezone(UTC)
+            return bool(datetime.now(UTC) >= aired_at.astimezone(UTC))
 
         weekday = subscription.expected_airing_weekday
         if weekday is None:
