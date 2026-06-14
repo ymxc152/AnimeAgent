@@ -1,7 +1,8 @@
 """Tests for send_download node."""
 
 import json
-from unittest.mock import AsyncMock
+from types import SimpleNamespace
+from unittest.mock import AsyncMock, patch
 
 from anime_agent.agents.episode.nodes.send_download import SendDownloadNode
 from anime_agent.tools.base import ToolOutput
@@ -58,24 +59,44 @@ async def test_send_download_fails_without_matched_torrent():
 
 
 async def test_send_download_skips_already_failed_hash():
-    """send_download should not retry a failed hash."""
+    """send_download should not retry a failed hash and mark it for re-matching."""
     state = _state()
     state["torrent_failed_hashes"] = ["abc1"]
 
     node = SendDownloadNode(qb_tool=AsyncMock(), llm_tool=_mock_llm("add"))
     result = await node(state)
 
-    assert result["status"] == "failed"
-    assert "already failed" in result["errors"][0]
+    assert result["status"] == "retry_match"
+    assert "abc1" in result["torrent_failed_hashes"]
 
 
 async def test_send_download_captures_tool_error():
-    """send_download should capture qBittorrent errors."""
+    """send_download should capture qBittorrent errors and allow retry_match."""
     qb_tool = AsyncMock()
     qb_tool.invoke.return_value = ToolOutput(success=False, error="qB down")
 
     node = SendDownloadNode(qb_tool=qb_tool, llm_tool=_mock_llm("add"))
     result = await node(_state())
 
-    assert result["status"] == "failed"
+    assert result["status"] == "retry_match"
     assert "qB down" in result["errors"][0]
+    assert "abc1" in result["torrent_failed_hashes"]
+
+
+async def test_send_download_rejects_duplicate_hash_for_other_subscription():
+    """send_download should refuse to reuse a torrent hash owned by another subscription."""
+    qb_tool = AsyncMock()
+    qb_tool.invoke.return_value = ToolOutput(success=True, data={"hash": "abc1"})
+
+    node = SendDownloadNode(qb_tool=qb_tool, llm_tool=_mock_llm("add"))
+    duplicate = SimpleNamespace(
+        subscription_id=99,
+        episode_number=1,
+    )
+
+    with patch.object(node, "_find_duplicate_owner", return_value=duplicate):
+        result = await node(_state())
+
+    assert result["status"] == "retry_match"
+    assert "abc1" in result["torrent_failed_hashes"]
+    qb_tool.invoke.assert_not_awaited()

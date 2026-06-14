@@ -2,6 +2,8 @@
 
 from datetime import datetime, timedelta
 
+import pytest
+
 from anime_agent.memory.models import (
     AutoSubscribeRule,
     Episode,
@@ -223,6 +225,34 @@ class TestEpisodeStore:
         ep.status = "downloading"
         updated = await ep_store.update(ep)
         assert updated.status == "downloading"
+
+    async def test_get_by_torrent_hash(self, db_session):
+        sub_store = SubscriptionStore(db_session)
+        sub = await sub_store.create(_make_subscription())
+
+        ep_store = EpisodeStore(db_session)
+        ep = await ep_store.create(
+            _make_episode(sub.id, 1, torrent_hash="deadbeef")
+        )
+
+        found = await ep_store.get_by_torrent_hash("deadbeef")
+        assert found is not None
+        assert found.id == ep.id
+
+        missing = await ep_store.get_by_torrent_hash("nope")
+        assert missing is None
+
+    async def test_unique_constraint_on_subscription_episode(self, db_session):
+        sub_store = SubscriptionStore(db_session)
+        sub = await sub_store.create(_make_subscription())
+
+        ep_store = EpisodeStore(db_session)
+        await ep_store.create(_make_episode(sub.id, 1))
+
+        from sqlalchemy.exc import IntegrityError
+
+        with pytest.raises(IntegrityError):
+            await ep_store.create(_make_episode(sub.id, 1))
 
 
 # ── TaskScheduleStore ───────────────────────────────────────────────────

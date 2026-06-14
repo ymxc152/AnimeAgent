@@ -172,7 +172,10 @@ def build_episode_graph(**node_overrides: Any) -> CompiledStateGraph:
     )
     builder.add_node("match_torrent", node_overrides.get("match_torrent", MatchTorrentNode()))
     builder.add_node("search_resources", node_overrides.get("search_resources", SearchResourcesNode()))
-    builder.add_node("send_download", node_overrides.get("send_download", SendDownloadNode()))
+    builder.add_node(
+        "send_download",
+        node_overrides.get("send_download", SendDownloadNode(session_factory=session_factory)),
+    )
     builder.add_node("poll_download", node_overrides.get("poll_download", PollDownloadNode()))
     builder.add_node("process_metadata", node_overrides.get("process_metadata", ProcessMetadataNode()))
     builder.add_node("organize_files", node_overrides.get("organize_files", OrganizeFilesNode()))

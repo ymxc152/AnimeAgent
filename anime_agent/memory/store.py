@@ -120,6 +120,12 @@ class EpisodeStore:
         )
         return list(result.scalars().all())
 
+    async def get_by_torrent_hash(self, torrent_hash: str) -> Episode | None:
+        result = await self.session.execute(
+            select(Episode).where(Episode.torrent_hash == torrent_hash)
+        )
+        return result.scalar_one_or_none()
+
     async def update(self, episode: Episode) -> Episode:
         await self.session.commit()
         await self.session.refresh(episode)

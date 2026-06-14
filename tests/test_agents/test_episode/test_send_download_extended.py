@@ -15,6 +15,7 @@ def node():
     n.llm_tool = AsyncMock()
     n.bash_tool = AsyncMock()
     n.qb_tool = AsyncMock()
+    n.session_factory = None
     n.NODE_NAME = "send_download"
     n.SYSTEM_PROMPT = ""
     n.ACTIONS = {}
@@ -127,13 +128,13 @@ class TestBuildResult:
         built = node._build_result(action, result, state)
         assert built["torrent_failed_hashes"].count("abc123") == 1
 
-    def test_other_action_returns_failed(self, node):
+    def test_other_action_returns_retry_match(self, node):
         action = AgentAction("unknown")
         result = {"output": "Some error"}
         state = {}
 
         built = node._build_result(action, result, state)
-        assert built["status"] == "failed"
+        assert built["status"] == "retry_match"
 
 
 # ── _act check_qb ───────────────────────────────────────────────────────
