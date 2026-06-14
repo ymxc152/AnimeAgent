@@ -88,6 +88,7 @@ class Episode(Base):
     torrent_added_at = Column(DateTime)
     torrent_last_speed = Column(Float, default=0.0)
     torrent_last_speed_at = Column(DateTime)
+    torrent_progress = Column(Float, default=0.0)
     torrent_status = Column(String)
     torrent_checked_at = Column(DateTime)
     torrent_failed_hashes = Column(Text)
@@ -192,3 +193,19 @@ class TaskSchedule(Base):
     is_active = Column(Boolean, default=True)
 
     subscription = relationship("Subscription", back_populates="schedules")
+
+
+class ErrorLog(Base):
+    """Error handling log for Agent-driven error recovery."""
+
+    __tablename__ = "error_logs"
+
+    id = Column(Integer, primary_key=True)
+    episode_id = Column(Integer, ForeignKey("episodes.id"), index=True)
+    subscription_id = Column(Integer, index=True)
+    node_name = Column(String, nullable=False)
+    error_message = Column(Text)
+    bash_commands_tried = Column(Text)  # JSON: [{"command": "...", "output": "...", "success": bool}]
+    llm_reasoning = Column(Text)
+    resolution = Column(String)  # "bash_fixed" / "retry_success" / "skip" / "exhausted"
+    created_at = Column(DateTime, default=datetime.utcnow)

@@ -18,9 +18,9 @@ import type {
 import { useI18n } from '../i18n/useI18n'
 import { usePolling } from '../hooks/usePolling'
 import { useToast } from '../hooks/useToast'
-import { Card, Button, Input, Select, Badge, EmptyState, Modal, SkeletonCard } from '../components/ui'
+import { Card, Button, Input, Select, Badge, EmptyState, Modal, SkeletonCard, FloatingActionButton } from '../components/ui'
 import { DiscoveryRuleForm } from './DiscoveryRuleForm'
-import { Compass, Search, Plus, Filter, X, Settings2 } from 'lucide-react'
+import { Compass, Search, Plus, Filter, X, Settings2, RefreshCw } from 'lucide-react'
 
 const SEASONS = ['WINTER', 'SPRING', 'SUMMER', 'FALL']
 const CACHE_KEY = 'animeagent-discovery-cache'
@@ -252,6 +252,12 @@ export function Discovery() {
     })
   }
 
+  function startAddRule() {
+    setEditingRule(null)
+    setRuleForm(EMPTY_RULE)
+    setShowRules(true)
+  }
+
   const seasonOptions = SEASONS.map((s) => ({
     value: s,
     label: t.discovery.seasons[s as keyof typeof t.discovery.seasons],
@@ -299,7 +305,7 @@ export function Discovery() {
       )}
 
       {/* Search & filters */}
-      <Card>
+      <Card padding="sm">
         <div className="space-y-4">
           {/* Row 1: Season selector */}
           <div className="grid grid-cols-2 gap-4 sm:grid-cols-4">
@@ -371,11 +377,13 @@ export function Discovery() {
           <SkeletonCard />
         </div>
       ) : filteredResults.length === 0 ? (
-        <EmptyState
-          title={results.length > 0 ? t.discovery.noMatch : t.discovery.noResults}
-          description={results.length > 0 ? t.discovery.tryDifferentFilter : undefined}
-          icon={<Compass className="h-8 w-8" />}
-        />
+        <Card padding="lg">
+          <EmptyState
+            title={results.length > 0 ? t.discovery.noMatch : t.discovery.noResults}
+            description={results.length > 0 ? t.discovery.tryDifferentFilter : undefined}
+            icon={<Compass className="h-8 w-8" />}
+          />
+        </Card>
       ) : (
         <div className="space-y-3">
           {filteredResults.map((item) => (
@@ -433,6 +441,21 @@ export function Discovery() {
           ))}
         </div>
       )}
+
+      <FloatingActionButton
+        position="bottom-left"
+        variant="secondary"
+        icon={<RefreshCw className="h-5 w-5" />}
+        title={t.common.retry}
+        onClick={() => void handleSearch()}
+      />
+      <FloatingActionButton
+        position="bottom-right"
+        variant="primary"
+        icon={<Plus className="h-5 w-5" />}
+        label={t.discovery.addRule}
+        onClick={startAddRule}
+      />
 
       {/* Auto-subscribe rules modal */}
       {showRules && (

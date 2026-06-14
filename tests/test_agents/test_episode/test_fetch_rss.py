@@ -1,5 +1,6 @@
 """Tests for fetch_rss node."""
 
+import json
 from contextlib import asynccontextmanager
 from unittest.mock import AsyncMock, MagicMock, patch
 
@@ -7,6 +8,16 @@ import pytest
 
 from anime_agent.agents.episode.nodes.fetch_rss import FetchRSSNode
 from anime_agent.tools.base import ToolOutput
+
+
+def _mock_llm(action: str = "fetch", **params) -> AsyncMock:
+    """Return a mock LLM tool that returns a single JSON action."""
+    mock = AsyncMock()
+    mock.invoke.return_value = ToolOutput(
+        success=True,
+        data={"text": json.dumps({"action": action, "reasoning": "test", **params})},
+    )
+    return mock
 
 
 def _state(rss_source_id: int | None = 1) -> dict:
@@ -60,7 +71,7 @@ def _make_node(mock_store, rss_tool=None, sources=None):
     async def _factory():
         yield mock_session
 
-    return FetchRSSNode(rss_tool=rss_tool, session_factory=_factory)
+    return FetchRSSNode(rss_tool=rss_tool, session_factory=_factory, llm_tool=_mock_llm())
 
 
 async def test_fetch_rss_returns_candidates(mock_store):
@@ -131,7 +142,7 @@ async def test_fetch_rss_returns_waiting_on_tool_failure(mock_store):
 
 async def test_fetch_rss_returns_failed_when_no_session_factory():
     """fetch_rss should fail when no session_factory configured."""
-    node = FetchRSSNode()
+    node = FetchRSSNode(llm_tool=_mock_llm())
     result = await node(_state())
 
     assert result["status"] == "failed"
@@ -179,14 +190,14 @@ async def test_fetch_rss_falls_back_when_source_inactive(mock_store):
 
 def test_fetch_rss_builds_nyaa_title_url():
     """FetchRSSNode should append the anime title to Nyaa q parameter."""
-    node = FetchRSSNode()
+    node = FetchRSSNode(llm_tool=_mock_llm())
     url = node._build_source_url("https://nyaa.si/?page=rss&q=1080p&c=1_3&f=2", "Frieren")
     assert "q=1080p+Frieren" in url or "q=Frieren+1080p" in url
 
 
 def test_fetch_rss_builds_animegarden_title_url():
     """FetchRSSNode should append the anime title to AnimeGarden keyword parameters."""
-    node = FetchRSSNode()
+    node = FetchRSSNode(llm_tool=_mock_llm())
     url = node._build_source_url("https://api.animes.garden/feed.xml?keyword=1080", "Frieren")
     assert "keyword=1080" in url
     assert "keyword=Frieren" in url
@@ -194,14 +205,14 @@ def test_fetch_rss_builds_animegarden_title_url():
 
 def test_fetch_rss_leaves_unknown_sources_unchanged():
     """FetchRSSNode should not modify URLs for unknown RSS sources."""
-    node = FetchRSSNode()
+    node = FetchRSSNode(llm_tool=_mock_llm())
     original = "https://example.com/rss?search=1080p"
     assert node._build_source_url(original, "Frieren") == original
 
 
 def test_fetch_rss_prefers_romaji_for_nyaa():
     """FetchRSSNode should use romaji title for Nyaa sources."""
-    node = FetchRSSNode()
+    node = FetchRSSNode(llm_tool=_mock_llm())
     state = {
         "title_romaji": "Otonari no Tenshi-sama",
         "title_native": "お隣の天使様",
@@ -212,7 +223,7 @@ def test_fetch_rss_prefers_romaji_for_nyaa():
 
 def test_fetch_rss_prefers_chinese_for_animegarden():
     """FetchRSSNode should use Chinese title for AnimeGarden sources."""
-    node = FetchRSSNode()
+    node = FetchRSSNode(llm_tool=_mock_llm())
     state = {
         "title_romaji": "Otonari no Tenshi-sama",
         "title_native": "お隣の天使様",

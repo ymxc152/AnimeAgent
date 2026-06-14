@@ -1,9 +1,27 @@
 """Tests for match_torrent node."""
 
-from unittest.mock import AsyncMock
+import json
+from unittest.mock import AsyncMock, MagicMock
+
+import pytest
 
 from anime_agent.agents.episode.nodes.match_torrent import MatchTorrentNode
 from anime_agent.tools.base import ToolOutput
+
+
+def _mock_llm(action: str, **params) -> AsyncMock:
+    """Return a mock LLM tool that returns a single JSON action."""
+    result = ToolOutput(
+        success=True,
+        data={"text": json.dumps({"action": action, "reasoning": "test", **params})},
+    )
+
+    async def _invoke(input_data):
+        return result
+
+    mock = AsyncMock()
+    mock.invoke = AsyncMock(side_effect=_invoke)
+    return mock
 
 
 def _state(low_confidence_count: int = 0, candidates: list | None = None, resource_searched: bool = False) -> dict:
@@ -20,75 +38,31 @@ def _state(low_confidence_count: int = 0, candidates: list | None = None, resour
     }
 
 
+def _make_selector(prefilter_result=None):
+    """Create a MagicMock selector with _prefilter returning the given result."""
+    selector = MagicMock()
+    selector._prefilter.return_value = prefilter_result or []
+    return selector
+
+
 async def test_match_torrent_selects_high_confidence_candidate():
     """match_torrent should select a candidate and set matched_torrent."""
-    selector = AsyncMock()
-    selector.select.return_value = ToolOutput(
-        success=True,
-        data={
-            "matched": True,
-            "info_hash": "abc1",
-            "title": "[Sub] Anime - 01 [1080p].mkv",
-            "link": "magnet:?xt=urn:btih:abc1",
-            "confidence": 0.95,
-        },
-    )
+    selector = _make_selector([{"title": "test", "info_hash": "abc1", "size": 1000}])
 
-    node = MatchTorrentNode(selector=selector)
+    llm = _mock_llm("select", info_hash="abc1")
+    node = MatchTorrentNode(selector=selector, llm_tool=llm)
     result = await node(_state(candidates=[{"title": "test", "info_hash": "abc1"}]))
 
     assert result["matched_torrent"]["info_hash"] == "abc1"
     assert result["status"] == "matched"
-    assert result["low_confidence_count"] == 0
 
 
-async def test_match_torrent_increments_low_confidence():
-    """match_torrent should increment low_confidence_count for medium confidence."""
-    selector = AsyncMock()
-    selector.select.return_value = ToolOutput(
-        success=True,
-        data={
-            "matched": True,
-            "info_hash": "abc1",
-            "confidence": 0.65,
-        },
-    )
+async def test_match_torrent_returns_no_match_on_abort():
+    """match_torrent should return no_match when LLM aborts."""
+    selector = _make_selector([{"title": "test", "info_hash": "abc1", "size": 1000}])
 
-    node = MatchTorrentNode(selector=selector)
-    result = await node(_state(low_confidence_count=1, candidates=[{"title": "test", "info_hash": "abc1"}]))
-
-    assert result["low_confidence_count"] == 2
-    assert result["status"] == "low_confidence"
-
-
-async def test_match_torrent_keeps_low_confidence_after_max_attempts():
-    """match_torrent should keep status low_confidence; reflection decides escalation."""
-    selector = AsyncMock()
-    selector.select.return_value = ToolOutput(
-        success=True,
-        data={
-            "matched": True,
-            "info_hash": "abc1",
-            "confidence": 0.65,
-        },
-    )
-
-    node = MatchTorrentNode(selector=selector)
-    result = await node(_state(low_confidence_count=2, candidates=[{"title": "test", "info_hash": "abc1"}]))
-
-    assert result["status"] == "low_confidence"
-    assert result["low_confidence_count"] == 3
-
-
-async def test_match_torrent_returns_no_match():
-    """match_torrent should handle no match gracefully."""
-    selector = AsyncMock()
-    selector.select.return_value = ToolOutput(
-        success=True,
-        data={"matched": False, "reason": "No candidates"},
-    )
-
-    node = MatchTorrentNode(selector=selector)
+    llm = _mock_llm("abort")
+    node = MatchTorrentNode(selector=selector, llm_tool=llm)
     result = await node(_state(candidates=[{"title": "test", "info_hash": "abc1"}]))
 
     assert result["matched_torrent"] is None
@@ -97,23 +71,38 @@ async def test_match_torrent_returns_no_match():
 
 async def test_match_torrent_triggers_search_resources_when_empty():
     """match_torrent should trigger search_resources when candidates are empty."""
-    selector = AsyncMock()
-    node = MatchTorrentNode(selector=selector)
+    selector = _make_selector([])
+
+    llm = _mock_llm("search_more")
+    node = MatchTorrentNode(selector=selector, llm_tool=llm)
     result = await node(_state(candidates=[], resource_searched=False))
 
     assert result["status"] == "search_resources"
-    selector.select.assert_not_called()
+    selector._prefilter.assert_called()
 
 
 async def test_match_torrent_returns_no_match_when_empty_and_searched():
     """match_torrent should return no_match when candidates empty but search already done."""
-    selector = AsyncMock()
-    selector.select.return_value = ToolOutput(
-        success=True,
-        data={"matched": False, "reason": "No candidates"},
-    )
+    selector = _make_selector([])
 
-    node = MatchTorrentNode(selector=selector)
+    llm = _mock_llm("abort")
+    node = MatchTorrentNode(selector=selector, llm_tool=llm)
     result = await node(_state(candidates=[], resource_searched=True))
 
+    assert result["matched_torrent"] is None
     assert result["status"] == "no_match"
+
+
+async def test_match_torrent_handles_llm_error():
+    """match_torrent should handle LLM errors gracefully."""
+    selector = _make_selector([{"title": "test", "info_hash": "abc1", "size": 1000}])
+
+    llm = AsyncMock()
+    async def _fail_invoke(input_data):
+        return ToolOutput(success=False, error="LLM unavailable")
+    llm.invoke = AsyncMock(side_effect=_fail_invoke)
+    node = MatchTorrentNode(selector=selector, llm_tool=llm)
+    result = await node(_state(candidates=[{"title": "test", "info_hash": "abc1"}]))
+
+    assert result["status"] == "failed"
+    assert "errors" in result

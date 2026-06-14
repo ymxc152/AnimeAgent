@@ -1,10 +1,23 @@
 """Tests for ScheduleResumeNode."""
 
+import json
 from datetime import UTC, datetime, timedelta
+from unittest.mock import AsyncMock
 
 import pytest
 
 from anime_agent.agents.episode.nodes.schedule_resume import ScheduleResumeNode
+from anime_agent.tools.base import ToolOutput
+
+
+def _mock_llm(action: str = "schedule", interval: int = 600, **params) -> AsyncMock:
+    """Return a mock LLM tool that returns a single JSON action."""
+    mock = AsyncMock()
+    mock.invoke.return_value = ToolOutput(
+        success=True,
+        data={"text": json.dumps({"action": action, "reasoning": "test", "interval": interval, **params})},
+    )
+    return mock
 
 
 @pytest.fixture
@@ -17,7 +30,11 @@ def base_state():
 
 async def test_schedule_resume_uses_rss_wait_interval_for_waiting_for_rss(base_state):
     """waiting_for_rss should use the longer RSS wait interval."""
-    node = ScheduleResumeNode(interval_seconds=60, rss_wait_seconds=3600)
+    node = ScheduleResumeNode(
+        interval_seconds=60,
+        rss_wait_seconds=3600,
+        llm_tool=_mock_llm("schedule", interval=3600),
+    )
     base_state["status"] = "waiting_for_rss"
 
     result = await node(base_state)
@@ -30,7 +47,11 @@ async def test_schedule_resume_uses_rss_wait_interval_for_waiting_for_rss(base_s
 
 async def test_schedule_resume_uses_default_interval_for_other_statuses(base_state):
     """Non-RSS-wait statuses should use the default interval."""
-    node = ScheduleResumeNode(interval_seconds=60, rss_wait_seconds=3600)
+    node = ScheduleResumeNode(
+        interval_seconds=60,
+        rss_wait_seconds=3600,
+        llm_tool=_mock_llm("schedule", interval=60),
+    )
     base_state["status"] = "search_resources"
 
     result = await node(base_state)
@@ -43,7 +64,11 @@ async def test_schedule_resume_uses_default_interval_for_other_statuses(base_sta
 
 async def test_schedule_resume_preserves_existing_resume_after_for_downloading(base_state):
     """Downloading state should keep the resume_after set by PollDownloadNode."""
-    node = ScheduleResumeNode(interval_seconds=60, rss_wait_seconds=3600)
+    node = ScheduleResumeNode(
+        interval_seconds=60,
+        rss_wait_seconds=3600,
+        llm_tool=_mock_llm("schedule", interval=60),
+    )
     existing = (datetime.now(UTC) + timedelta(minutes=5)).isoformat()
     base_state["status"] = "downloading"
     base_state["resume_after"] = existing

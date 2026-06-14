@@ -1,3 +1,5 @@
+import { Card } from './Card'
+
 interface SkeletonProps {
   className?: string
 }
@@ -10,9 +12,16 @@ export function Skeleton({ className = '' }: SkeletonProps) {
   )
 }
 
-export function SkeletonCard({ lines = 2 }: { lines?: number }) {
+interface SkeletonCardProps {
+  lines?: number
+  variant?: 'list-item' | 'stat' | 'compact'
+}
+
+export function SkeletonCard({ lines = 2, variant = 'list-item' }: SkeletonCardProps) {
+  const padding = variant === 'compact' ? 'sm' : 'md'
+
   return (
-    <div className="rounded-2xl border border-slate-200/60 bg-white/80 p-6 dark:border-slate-700/60 dark:bg-slate-900/80">
+    <Card padding={padding}>
       <div className="flex items-start justify-between gap-4">
         <div className="flex-1 space-y-3">
           <Skeleton className="h-5 w-1/3" />
@@ -20,6 +29,6 @@ export function SkeletonCard({ lines = 2 }: { lines?: number }) {
         </div>
         <Skeleton className="h-9 w-20" />
       </div>
-    </div>
+    </Card>
   )
 }

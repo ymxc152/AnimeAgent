@@ -5,6 +5,7 @@ from typing import Any
 from langgraph.graph import END, START
 from langgraph.graph.state import CompiledStateGraph, StateGraph
 
+from anime_agent.agents.episode.error_handler import ErrorHandlerNode
 from anime_agent.agents.episode.nodes.fetch_rss import FetchRSSNode
 from anime_agent.agents.episode.nodes.handle_error import HandleErrorNode
 from anime_agent.agents.episode.nodes.human_review import HumanReviewNode
@@ -34,14 +35,14 @@ def _status_router(state: EpisodeAgentState) -> str:
         "organized": "refresh_emby",
         "organized_with_warnings": "refresh_emby",
         "human_review": "human_review",
-        "failed": "handle_error",
+        "failed": "error_handler",
     }.get(status, "fetch_rss")
 
 
 def _after_fetch_rss(state: EpisodeAgentState) -> str:
     status = state.get("status")
     if status == "failed":
-        return "handle_error"
+        return "error_handler"
     return "match_torrent"
 
 
@@ -61,7 +62,7 @@ def _after_match_torrent(state: EpisodeAgentState) -> str:
         if state.get("torrent_candidates"):
             return "reflect_match"
         return "schedule_resume"
-    return "handle_error"
+    return "error_handler"
 
 
 def _after_reflect_match(state: EpisodeAgentState) -> str:
@@ -74,7 +75,7 @@ def _after_reflect_match(state: EpisodeAgentState) -> str:
         return "schedule_resume"
     if status == "human_review":
         return "human_review"
-    return "handle_error"
+    return "error_handler"
 
 
 def _after_search_resources(state: EpisodeAgentState) -> str:
@@ -83,14 +84,14 @@ def _after_search_resources(state: EpisodeAgentState) -> str:
         return "match_torrent"
     if status == "failed":
         return "schedule_resume"
-    return "handle_error"
+    return "error_handler"
 
 
 def _after_send_download(state: EpisodeAgentState) -> str:
     status = state.get("status")
     if status == "downloading":
         return "poll_download"
-    return "handle_error"
+    return "error_handler"
 
 
 def _after_poll_download(state: EpisodeAgentState) -> str:
@@ -101,27 +102,46 @@ def _after_poll_download(state: EpisodeAgentState) -> str:
         return "process_metadata"
     if status == "retry_match":
         return "match_torrent"
-    return "handle_error"
+    return "error_handler"
 
 
 def _after_process_metadata(state: EpisodeAgentState) -> str:
     status = state.get("status")
     if status == "metadata_processed":
         return "organize_files"
-    return "handle_error"
+    return "error_handler"
 
 
 def _after_organize_files(state: EpisodeAgentState) -> str:
     status = state.get("status")
     if status in ("organized", "organized_with_warnings"):
         return "refresh_emby"
-    return "handle_error"
+    return "error_handler"
 
 
 def _after_refresh_emby(state: EpisodeAgentState) -> str:
     status = state.get("status")
     if status == "completed":
         return "notify_user"
+    return "error_handler"
+
+
+def _after_error_handler(state: EpisodeAgentState) -> str:
+    """Route after ErrorHandler completes its attempt."""
+    status = state.get("status", "failed")
+    if status.startswith("retry_"):
+        # retry_organize_files -> organize_files, retry_send_download -> send_download, etc.
+        target = status.replace("retry_", "")
+        # Map to valid node names
+        valid_nodes = {
+            "fetch_rss", "match_torrent", "search_resources", "send_download",
+            "poll_download", "process_metadata", "organize_files", "refresh_emby",
+        }
+        return target if target in valid_nodes else "handle_error"
+    if status == "skipped":
+        # Skip goes to handle_error -> notify_user
+        return "handle_error"
+    # abort or exhausted -> handle_error -> notify_user
     return "handle_error"
 
 
@@ -162,6 +182,7 @@ def build_episode_graph(**node_overrides: Any) -> CompiledStateGraph:
     builder.add_node("schedule_resume", node_overrides.get("schedule_resume", ScheduleResumeNode()))
     builder.add_node("handle_error", node_overrides.get("handle_error", HandleErrorNode()))
     builder.add_node("notify_user", node_overrides.get("notify_user", NotifyUserNode()))
+    builder.add_node("error_handler", node_overrides.get("error_handler", ErrorHandlerNode()))
 
     builder.add_conditional_edges(START, _status_router)
 
@@ -175,6 +196,7 @@ def build_episode_graph(**node_overrides: Any) -> CompiledStateGraph:
     builder.add_conditional_edges("organize_files", _after_organize_files)
     builder.add_conditional_edges("refresh_emby", _after_refresh_emby)
     builder.add_conditional_edges("handle_error", _after_handle_error)
+    builder.add_conditional_edges("error_handler", _after_error_handler)
     builder.add_conditional_edges("human_review", _after_human_review)
     builder.add_edge("schedule_resume", END)
     builder.add_edge("notify_user", END)

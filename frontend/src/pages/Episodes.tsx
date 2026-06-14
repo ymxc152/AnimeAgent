@@ -20,6 +20,7 @@ import {
   EmptyState,
   Modal,
   MultiSelect,
+  FloatingActionButton,
 } from '../components/ui'
 import {
   PlayCircle,
@@ -55,14 +56,9 @@ function formatSpeed(kbps: number): string {
   return `${(kbps / 1024).toFixed(2)} MB/s`
 }
 
-function parseTorrentProgress(status: string | null): number {
-  // Very rough estimate based on qBittorrent state strings.
-  if (!status) return 0
-  if (status.includes('UP')) return 100
-  if (status.includes('metadata')) return 5
-  if (status.includes('stalledDL')) return 40
-  if (status.includes('downloading')) return 60
-  return 30
+function formatProgress(progress: number): string {
+  const pct = Math.round((progress || 0) * 100)
+  return `${pct}%`
 }
 
 export function Episodes() {
@@ -184,7 +180,7 @@ export function Episodes() {
       )}
 
       {/* Filters */}
-      <Card>
+      <Card padding="sm">
         <div className="grid grid-cols-1 gap-4 sm:grid-cols-2">
           <Select
             label={t.episodes.filters.subscription}
@@ -206,10 +202,12 @@ export function Episodes() {
       {loading && episodes.length === 0 ? (
         <Loading message={t.common.loading} />
       ) : episodes.length === 0 ? (
-        <EmptyState
-          title={t.episodes.noEpisodes}
-          icon={<PlayCircle className="h-8 w-8" />}
-        />
+        <Card padding="lg">
+          <EmptyState
+            title={t.episodes.noEpisodes}
+            icon={<PlayCircle className="h-8 w-8" />}
+          />
+        </Card>
       ) : (
         <div className="space-y-3">
           {episodes.map((ep) => (
@@ -245,12 +243,12 @@ export function Episodes() {
                           <Download className="h-3 w-3" />
                           {formatSpeed(ep.torrent_last_speed)}
                         </span>
-                        <span>{parseTorrentProgress(ep.torrent_status)}%</span>
+                        <span>{formatProgress(ep.torrent_progress)}</span>
                       </div>
                       <div className="h-2 w-full overflow-hidden rounded-full bg-slate-100 dark:bg-slate-800">
                         <div
                           className="h-full rounded-full bg-gradient-to-r from-sky-500 to-cyan-500 transition-all duration-500"
-                          style={{ width: `${parseTorrentProgress(ep.torrent_status)}%` }}
+                          style={{ width: formatProgress(ep.torrent_progress) }}
                         />
                       </div>
                     </div>
@@ -345,6 +343,7 @@ export function Episodes() {
                 <DetailRow label={t.episodes.detail.torrentName} value={detail.torrent_name} />
                 <DetailRow label={t.episodes.detail.infoHash} value={detail.torrent_info_hash || detail.torrent_hash} />
                 <DetailRow label={t.episodes.detail.qbStatus} value={detail.torrent_status} />
+                <DetailRow label={t.episodes.detail.progress} value={formatProgress(detail.torrent_progress)} />
                 <DetailRow label={t.episodes.detail.downloadSpeed} value={formatSpeed(detail.torrent_last_speed)} />
                 <DetailRow label={t.episodes.detail.candidateCount} value={String(detail.torrent_candidates_count)} />
               </DetailSection>
@@ -395,6 +394,14 @@ export function Episodes() {
           )}
         </Modal>
       )}
+
+      <FloatingActionButton
+        position="bottom-left"
+        variant="secondary"
+        icon={<RefreshCw className="h-5 w-5" />}
+        title={t.common.retry}
+        onClick={() => void load()}
+      />
     </div>
   )
 }

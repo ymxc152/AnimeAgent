@@ -2,7 +2,7 @@ import { useCallback, useEffect, useState } from 'react'
 import { listLogs } from '../api/client'
 import { useI18n } from '../i18n/useI18n'
 import { usePolling } from '../hooks/usePolling'
-import { Card, Button, Input, Loading, EmptyState } from '../components/ui'
+import { Card, Button, Input, Loading, EmptyState, FloatingActionButton } from '../components/ui'
 import { ScrollText, RefreshCw } from 'lucide-react'
 
 export function Logs() {
@@ -65,12 +65,14 @@ export function Logs() {
 
       {/* Log content */}
       {loading ? (
-        <Loading message={t.common.loading} />
+        <Loading message={t.common.loading} card />
       ) : logs.length === 0 ? (
-        <EmptyState
-          title={t.logs.noLogs}
-          icon={<ScrollText className="h-8 w-8" />}
-        />
+        <Card padding="lg">
+          <EmptyState
+            title={t.logs.noLogs}
+            icon={<ScrollText className="h-8 w-8" />}
+          />
+        </Card>
       ) : (
         <Card padding="none">
           <pre className="max-h-[70vh] overflow-auto p-5 font-mono text-xs leading-relaxed text-slate-700 dark:text-slate-300">
@@ -78,6 +80,14 @@ export function Logs() {
           </pre>
         </Card>
       )}
+
+      <FloatingActionButton
+        position="bottom-left"
+        variant="secondary"
+        icon={<RefreshCw className="h-5 w-5" />}
+        title={t.common.retry}
+        onClick={() => void load()}
+      />
     </div>
   )
 }

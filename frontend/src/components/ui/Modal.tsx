@@ -25,7 +25,7 @@ export function Modal({ title, children, onClose, footer, size = 'md' }: ModalPr
       }}
     >
       <div
-        className={`w-full ${widths[size]} max-h-[90vh] overflow-y-auto rounded-2xl border border-slate-200/60 bg-white/95 backdrop-blur-xl shadow-2xl dark:border-slate-700/60 dark:bg-slate-900/95`}
+        className={`w-full ${widths[size]} max-h-[90vh] overflow-y-auto rounded-2xl border border-slate-200/60 bg-white/95 backdrop-blur-xl shadow-lg dark:border-slate-700/60 dark:bg-slate-900/95`}
       >
         <div className="flex items-center justify-between border-b border-slate-100 px-6 py-4 dark:border-slate-800">
           <h3 className="text-lg font-semibold text-slate-900 dark:text-white">{title}</h3>

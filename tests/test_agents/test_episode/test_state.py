@@ -1,5 +1,6 @@
 """Tests for Episode state management and node status updates."""
 
+import json
 from unittest.mock import AsyncMock, MagicMock
 
 import pytest
@@ -10,6 +11,17 @@ from anime_agent.agents.episode.nodes.match_torrent import MatchTorrentNode
 from anime_agent.agents.episode.nodes.poll_download import PollDownloadNode
 from anime_agent.agents.episode.nodes.send_download import SendDownloadNode
 from anime_agent.agents.episode.state import EpisodeAgentState
+from anime_agent.tools.base import ToolOutput
+
+
+def _mock_llm(action: str = "abort", **params) -> AsyncMock:
+    """Return a mock LLM tool that returns a single JSON action."""
+    mock = AsyncMock()
+    mock.invoke.return_value = ToolOutput(
+        success=True,
+        data={"text": json.dumps({"action": action, "reasoning": "test", **params})},
+    )
+    return mock
 
 
 @pytest.fixture
@@ -75,7 +87,7 @@ class TestFetchRSSNodeStatus:
             yield mock_session
 
         with patch("anime_agent.agents.episode.nodes.fetch_rss.Store", return_value=mock_store):
-            node = FetchRSSNode(rss_tool=mock_tool, session_factory=_factory)
+            node = FetchRSSNode(rss_tool=mock_tool, session_factory=_factory, llm_tool=_mock_llm("fetch"))
             result = await node(base_state)
 
         assert result["status"] == "fetching"
@@ -83,14 +95,14 @@ class TestFetchRSSNodeStatus:
 
     async def test_fetch_rss_returns_failed_on_no_session_factory(self, base_state):
         """FetchRSSNode should return status='failed' when no session_factory."""
-        node = FetchRSSNode()
+        node = FetchRSSNode(llm_tool=_mock_llm("fetch"))
         result = await node(base_state)
 
         assert result["status"] == "failed"
         assert len(result["errors"]) > 0
 
     async def test_fetch_rss_returns_waiting_on_tool_error(self, base_state):
-        """FetchRSSNode should return status='waiting_for_rss' when all sources fail."""
+        """FetchRSSNode should return status='failed' when all sources fail."""
         from contextlib import asynccontextmanager
         from unittest.mock import patch
 
@@ -114,7 +126,7 @@ class TestFetchRSSNodeStatus:
             yield mock_session
 
         with patch("anime_agent.agents.episode.nodes.fetch_rss.Store", return_value=mock_store):
-            node = FetchRSSNode(rss_tool=mock_tool, session_factory=_factory)
+            node = FetchRSSNode(rss_tool=mock_tool, session_factory=_factory, llm_tool=_mock_llm("fetch"))
             result = await node(base_state)
 
         assert result["status"] == "waiting_for_rss"
@@ -129,19 +141,12 @@ class TestMatchTorrentNodeStatus:
             {"info_hash": "abc123", "title": "[Sub] Frieren - 01 [1080p].mkv", "link": "magnet:?xt=urn:btih:abc123"},
         ]
 
-        mock_selector = AsyncMock()
-        mock_selector.select.return_value = MagicMock(
-            success=True,
-            data={
-                "matched": True,
-                "info_hash": "abc123",
-                "title": "[Sub] Frieren - 01 [1080p].mkv",
-                "link": "magnet:?xt=urn:btih:abc123",
-                "confidence": 0.9,
-            },
-        )
+        mock_selector = MagicMock()
+        mock_selector._prefilter.return_value = [
+            {"info_hash": "abc123", "title": "[Sub] Frieren - 01 [1080p].mkv", "link": "magnet:?xt=urn:btih:abc123", "size": 1000},
+        ]
 
-        node = MatchTorrentNode(selector=mock_selector)
+        node = MatchTorrentNode(selector=mock_selector, llm_tool=_mock_llm("select", info_hash="abc123"))
         result = await node(base_state)
 
         assert result["status"] == "matched"
@@ -152,8 +157,9 @@ class TestMatchTorrentNodeStatus:
         base_state["torrent_candidates"] = []
         base_state["resource_searched"] = False
 
-        mock_selector = AsyncMock()
-        node = MatchTorrentNode(selector=mock_selector)
+        mock_selector = MagicMock()
+        mock_selector._prefilter.return_value = []
+        node = MatchTorrentNode(selector=mock_selector, llm_tool=_mock_llm("search_more"))
         result = await node(base_state)
 
         assert result["status"] == "search_resources"
@@ -163,41 +169,29 @@ class TestMatchTorrentNodeStatus:
         base_state["torrent_candidates"] = []
         base_state["resource_searched"] = True
 
-        mock_selector = AsyncMock()
-        mock_selector.select.return_value = MagicMock(
-            success=True,
-            data={"matched": False, "reason": "No candidates after pre-filtering"},
-        )
+        mock_selector = MagicMock()
+        mock_selector._prefilter.return_value = []
 
-        node = MatchTorrentNode(selector=mock_selector)
+        node = MatchTorrentNode(selector=mock_selector, llm_tool=_mock_llm("abort"))
         result = await node(base_state)
 
         assert result["status"] == "no_match"
 
-    async def test_match_torrent_returns_low_confidence_for_reflection(self, base_state):
-        """MatchTorrentNode should return status='low_confidence' so reflection can decide."""
+    async def test_match_torrent_returns_no_match_on_abort(self, base_state):
+        """MatchTorrentNode should return status='no_match' when LLM aborts."""
         base_state["torrent_candidates"] = [
             {"info_hash": "abc123", "title": "[Sub] Frieren - 01 [1080p].mkv", "link": "magnet:?xt=urn:btih:abc123"},
         ]
-        base_state["low_confidence_count"] = 2  # Already 2 attempts
 
-        mock_selector = AsyncMock()
-        mock_selector.select.return_value = MagicMock(
-            success=True,
-            data={
-                "matched": True,
-                "info_hash": "abc123",
-                "title": "[Sub] Frieren - 01 [1080p].mkv",
-                "link": "magnet:?xt=urn:btih:abc123",
-                "confidence": 0.5,
-            },
-        )
+        mock_selector = MagicMock()
+        mock_selector._prefilter.return_value = [
+            {"info_hash": "abc123", "title": "[Sub] Frieren - 01 [1080p].mkv", "link": "magnet:?xt=urn:btih:abc123", "size": 1000},
+        ]
 
-        node = MatchTorrentNode(selector=mock_selector)
+        node = MatchTorrentNode(selector=mock_selector, llm_tool=_mock_llm("abort"))
         result = await node(base_state)
 
-        assert result["status"] == "low_confidence"
-        assert result["low_confidence_count"] == 3
+        assert result["status"] == "no_match"
 
 
 class TestSendDownloadNodeStatus:
@@ -218,7 +212,7 @@ class TestSendDownloadNodeStatus:
             data={"hash": "abc123"},
         )
 
-        node = SendDownloadNode(qb_tool=mock_tool)
+        node = SendDownloadNode(qb_tool=mock_tool, llm_tool=_mock_llm("add"))
         result = await node(base_state)
 
         assert result["status"] == "downloading"
@@ -228,7 +222,7 @@ class TestSendDownloadNodeStatus:
         """SendDownloadNode should return status='failed' when no matched torrent."""
         base_state["matched_torrent"] = None
 
-        node = SendDownloadNode()
+        node = SendDownloadNode(llm_tool=_mock_llm())
         result = await node(base_state)
 
         assert result["status"] == "failed"
@@ -243,7 +237,7 @@ class TestSendDownloadNodeStatus:
         }
         base_state["torrent_failed_hashes"] = ["abc123"]
 
-        node = SendDownloadNode()
+        node = SendDownloadNode(llm_tool=_mock_llm())
         result = await node(base_state)
 
         assert result["status"] == "failed"
@@ -268,7 +262,7 @@ class TestPollDownloadNodeStatus:
             },
         )
 
-        node = PollDownloadNode(qb_tool=mock_tool)
+        node = PollDownloadNode(qb_tool=mock_tool, llm_tool=_mock_llm("wait"))
         result = await node(base_state)
 
         assert result["status"] == "downloading"
@@ -295,7 +289,7 @@ class TestPollDownloadNodeStatus:
             },
         )
 
-        node = PollDownloadNode(qb_tool=mock_tool)
+        node = PollDownloadNode(qb_tool=mock_tool, llm_tool=_mock_llm("done"))
         result = await node(base_state)
 
         assert result["status"] == "downloaded"
@@ -305,7 +299,7 @@ class TestPollDownloadNodeStatus:
         """PollDownloadNode should return status='failed' when no torrent hash."""
         base_state["torrent_hash"] = None
 
-        node = PollDownloadNode()
+        node = PollDownloadNode(llm_tool=_mock_llm())
         result = await node(base_state)
 
         assert result["status"] == "failed"
@@ -318,14 +312,6 @@ class TestGraphRouting:
     async def test_graph_routes_after_fetch_rss_success(self, base_state):
         """Graph should route to match_torrent after successful fetch_rss."""
         graph = build_episode_graph()
-
-        # Mock the fetch_rss node to return success
-        mock_fetch_rss = AsyncMock()
-        mock_fetch_rss.return_value = {
-            **base_state,
-            "status": "fetching",
-            "torrent_candidates": [{"info_hash": "abc123", "title": "test"}],
-        }
 
         # The graph should compile and have routing
         assert graph is not None

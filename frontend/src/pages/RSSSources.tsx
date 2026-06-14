@@ -4,8 +4,8 @@ import type { RSSSource } from '../types'
 import { useI18n } from '../i18n/useI18n'
 import { usePolling } from '../hooks/usePolling'
 import { useToast } from '../hooks/useToast'
-import { Card, Button, Input, Switch, Badge, EmptyState, Modal, SkeletonCard } from '../components/ui'
-import { Rss, Plus, Pencil, Trash2, X } from 'lucide-react'
+import { Card, Button, Input, Switch, Badge, EmptyState, Modal, SkeletonCard, FloatingActionButton } from '../components/ui'
+import { Rss, Plus, Pencil, Trash2, X, RefreshCw } from 'lucide-react'
 
 interface FormData {
   name: string
@@ -192,10 +192,12 @@ export function RSSSources() {
 
       {/* Source list */}
       {sources.length === 0 ? (
-        <EmptyState
-          title={t.rssSources.noSources}
-          icon={<Rss className="h-8 w-8" />}
-        />
+        <Card padding="lg">
+          <EmptyState
+            title={t.rssSources.noSources}
+            icon={<Rss className="h-8 w-8" />}
+          />
+        </Card>
       ) : (
         <div className="space-y-3">
           {sources.map((source) => (
@@ -230,6 +232,21 @@ export function RSSSources() {
           ))}
         </div>
       )}
+
+      <FloatingActionButton
+        position="bottom-left"
+        variant="secondary"
+        icon={<RefreshCw className="h-5 w-5" />}
+        title={t.common.retry}
+        onClick={() => void load()}
+      />
+      <FloatingActionButton
+        position="bottom-right"
+        variant="primary"
+        icon={<Plus className="h-5 w-5" />}
+        label={t.rssSources.addTitle}
+        onClick={startAdd}
+      />
 
       {/* Add/Edit modal */}
       {showModal && (

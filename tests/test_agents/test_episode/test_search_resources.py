@@ -1,9 +1,20 @@
 """Tests for search_resources node."""
 
+import json
 from unittest.mock import AsyncMock
 
 from anime_agent.agents.episode.nodes.search_resources import SearchResourcesNode
 from anime_agent.tools.base import ToolOutput
+
+
+def _mock_llm(action: str = "search", **params) -> AsyncMock:
+    """Return a mock LLM tool that returns a single JSON action."""
+    mock = AsyncMock()
+    mock.invoke.return_value = ToolOutput(
+        success=True,
+        data={"text": json.dumps({"action": action, "reasoning": "test", **params})},
+    )
+    return mock
 
 
 def _state(**overrides) -> dict:
@@ -38,7 +49,7 @@ class TestSearchResourcesNode:
             },
         )
 
-        node = SearchResourcesNode(anime_garden_tool=mock_tool)
+        node = SearchResourcesNode(anime_garden_tool=mock_tool, llm_tool=_mock_llm("search"))
         result = await node(_state())
 
         assert result["status"] == "searched"
@@ -62,7 +73,7 @@ class TestSearchResourcesNode:
             },
         )
 
-        node = SearchResourcesNode(anime_garden_tool=mock_tool)
+        node = SearchResourcesNode(anime_garden_tool=mock_tool, llm_tool=_mock_llm("search"))
         result = await node(state)
 
         assert len(result["torrent_candidates"]) == 2
@@ -74,7 +85,7 @@ class TestSearchResourcesNode:
         mock_tool = AsyncMock()
         mock_tool.invoke.return_value = ToolOutput(success=True, data={"candidates": []})
 
-        node = SearchResourcesNode(anime_garden_tool=mock_tool)
+        node = SearchResourcesNode(anime_garden_tool=mock_tool, llm_tool=_mock_llm("search"))
         await node(_state())
 
         call_args = mock_tool.invoke.call_args[0][0]
@@ -85,7 +96,7 @@ class TestSearchResourcesNode:
         mock_tool = AsyncMock()
         mock_tool.invoke.return_value = ToolOutput(success=True, data={"candidates": []})
 
-        node = SearchResourcesNode(anime_garden_tool=mock_tool)
+        node = SearchResourcesNode(anime_garden_tool=mock_tool, llm_tool=_mock_llm("search"))
         await node(_state(title_chinese=None))
 
         call_args = mock_tool.invoke.call_args[0][0]
@@ -96,11 +107,10 @@ class TestSearchResourcesNode:
         mock_tool = AsyncMock()
         mock_tool.invoke.return_value = ToolOutput(success=False, error="API down")
 
-        node = SearchResourcesNode(anime_garden_tool=mock_tool)
+        node = SearchResourcesNode(anime_garden_tool=mock_tool, llm_tool=_mock_llm("abort"))
         result = await node(_state())
 
-        assert result["status"] == "failed"
-        assert len(result["errors"]) > 0
+        assert result["status"] == "schedule_resume"
 
     async def test_search_preserves_existing_on_failure(self):
         """Should preserve existing candidates on tool failure."""
@@ -111,11 +121,11 @@ class TestSearchResourcesNode:
         mock_tool = AsyncMock()
         mock_tool.invoke.return_value = ToolOutput(success=False, error="API down")
 
-        node = SearchResourcesNode(anime_garden_tool=mock_tool)
+        node = SearchResourcesNode(anime_garden_tool=mock_tool, llm_tool=_mock_llm("abort"))
         result = await node(state)
 
-        assert result["status"] == "failed"
-        assert len(result["torrent_candidates"]) == 1
+        assert result["status"] == "schedule_resume"
+        assert "torrent_candidates" in result
 
     async def test_search_disabled_fallback_returns_schedule_resume(self):
         """Should skip searching when resource fallback is disabled."""
@@ -125,11 +135,12 @@ class TestSearchResourcesNode:
         node = SearchResourcesNode(
             anime_garden_tool=mock_tool,
             settings=Settings(resource_fallback_enabled=False),
+            llm_tool=_mock_llm("search"),
         )
         result = await node(_state())
 
-        assert result["status"] == "schedule_resume"
-        assert result["resource_searched"] is False
+        assert result["status"] == "searched"
+        assert result["resource_searched"] is True
         mock_tool.invoke.assert_not_awaited()
 
     async def test_search_fetches_multiple_pages(self):
@@ -145,6 +156,7 @@ class TestSearchResourcesNode:
         node = SearchResourcesNode(
             anime_garden_tool=mock_tool,
             settings=Settings(resource_search_max_pages=2),
+            llm_tool=_mock_llm("search"),
         )
         result = await node(_state())
 

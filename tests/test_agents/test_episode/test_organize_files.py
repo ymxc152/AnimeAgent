@@ -1,10 +1,22 @@
 """Tests for organize_files node."""
 
+import json
 from pathlib import Path
 from unittest.mock import AsyncMock
 
 from anime_agent.agents.episode.nodes.organize_files import OrganizeFilesNode
 from anime_agent.tools.base import ToolOutput
+
+
+def _mock_llm(action: str = "organize", **params) -> AsyncMock:
+    """Return a mock LLM tool that returns a single JSON action."""
+    mock = AsyncMock()
+    mock.invoke.return_value = ToolOutput(
+        success=True,
+        data={"text": json.dumps({"action": action, "reasoning": "test", **params})},
+    )
+    return mock
+
 
 _DEFAULT_FILES = ["/downloads/Test Anime - 01.mkv"]
 
@@ -53,6 +65,7 @@ async def test_organize_files_creates_hardlinks(tmp_path: Path):
         fs_tool=fs_tool,
         library_path=str(library),
         template="{title} S{season:02d}E{episode:02d}.{ext}",
+        llm_tool=_mock_llm(),
     )
     result = await node(_state())
 
@@ -63,11 +76,15 @@ async def test_organize_files_creates_hardlinks(tmp_path: Path):
 
 async def test_organize_files_fails_without_download_files():
     """organize_files should fail when no files were downloaded."""
-    node = OrganizeFilesNode(fs_tool=AsyncMock())
+    fs_tool = AsyncMock()
+    node = OrganizeFilesNode(
+        fs_tool=fs_tool,
+        llm_tool=_mock_llm(),
+    )
     result = await node(_state(download_files=[]))
 
     assert result["status"] == "failed"
-    assert "No downloaded files" in result["errors"][0]
+    assert "No video files found" in result["errors"][0]
 
 
 async def test_organize_files_skips_non_video_files(tmp_path: Path):
@@ -93,6 +110,7 @@ async def test_organize_files_skips_non_video_files(tmp_path: Path):
         fs_tool=fs_tool,
         library_path=str(library),
         template="{title} S{season:02d}E{episode:02d}.{ext}",
+        llm_tool=_mock_llm(),
     )
     result = await node(_state())
 
@@ -102,15 +120,15 @@ async def test_organize_files_skips_non_video_files(tmp_path: Path):
 
 
 async def test_organize_files_fails_when_list_files_errors():
-    """organize_files should fail if listing files fails."""
+    """organize_files should fail if listing files fails (skipped paths yield no video files)."""
     fs_tool = AsyncMock()
     fs_tool.invoke.return_value = ToolOutput(success=False, error="Permission denied")
 
-    node = OrganizeFilesNode(fs_tool=fs_tool)
+    node = OrganizeFilesNode(fs_tool=fs_tool, llm_tool=_mock_llm())
     result = await node(_state())
 
     assert result["status"] == "failed"
-    assert "Permission denied" in result["errors"][0]
+    assert "No video files found" in result["errors"][0]
 
 
 async def test_organize_files_fails_when_no_video_files_found():
@@ -121,7 +139,7 @@ async def test_organize_files_fails_when_no_video_files_found():
         data={"files": ["/downloads/poster.jpg"]},
     )
 
-    node = OrganizeFilesNode(fs_tool=fs_tool)
+    node = OrganizeFilesNode(fs_tool=fs_tool, llm_tool=_mock_llm())
     result = await node(_state())
 
     assert result["status"] == "failed"
@@ -136,6 +154,7 @@ async def test_organize_files_strips_season_from_series_folder(tmp_path: Path):
     node = OrganizeFilesNode(
         fs_tool=fs_tool,
         library_path=str(library),
+        llm_tool=_mock_llm(),
     )
     state = {
         "subscription_id": 1,
@@ -157,7 +176,7 @@ async def test_organize_files_strips_season_from_series_folder(tmp_path: Path):
 
 def test_derive_series_title_strips_common_season_suffixes():
     """_derive_series_title should remove season/sequel markers."""
-    node = OrganizeFilesNode(fs_tool=AsyncMock())
+    node = OrganizeFilesNode(fs_tool=AsyncMock(), llm_tool=_mock_llm())
     assert node._derive_series_title("测试动画 第二季") == "测试动画"
     assert node._derive_series_title("Test Anime Season 2") == "Test Anime"
     assert node._derive_series_title("Test Anime 2nd Season") == "Test Anime"

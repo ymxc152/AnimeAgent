@@ -4,7 +4,7 @@ import { getStats, getToolsHealth } from '../api/client'
 import type { Stats, ToolHealth } from '../types'
 import { useI18n } from '../i18n/useI18n'
 import { usePolling } from '../hooks/usePolling'
-import { Card, StatCard, Badge, Loading, EmptyState, Button } from '../components/ui'
+import { Card, StatCard, Badge, Loading, EmptyState, Button, FloatingActionButton } from '../components/ui'
 import {
   ListVideo,
   PlayCircle,
@@ -59,11 +59,13 @@ export function Dashboard() {
 
   if (error) {
     return (
-      <EmptyState
-        title={t.common.error}
-        description={error}
-        icon={<AlertTriangle className="h-8 w-8" />}
-      />
+      <Card padding="lg">
+        <EmptyState
+          title={t.common.error}
+          description={error}
+          icon={<AlertTriangle className="h-8 w-8" />}
+        />
+      </Card>
     )
   }
 
@@ -184,6 +186,17 @@ export function Dashboard() {
           </div>
         </Card>
       </div>
+
+      <FloatingActionButton
+        position="bottom-left"
+        variant="secondary"
+        icon={<RefreshCw className="h-5 w-5" />}
+        title={t.common.retry}
+        onClick={() => {
+          void loadStats()
+          void loadHealth()
+        }}
+      />
     </div>
   )
 }
