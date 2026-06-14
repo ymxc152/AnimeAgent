@@ -147,8 +147,29 @@ class Scheduler:
         """Execute active episodes for a subscription and reschedule it."""
         sub_id = cast(int, subscription.id)
         episodes = await store.episodes.list_by_subscription(sub_id)
-        terminal_statuses = {"completed", "failed", "skipped"}
-        active = [ep for ep in episodes if ep.status not in terminal_statuses]
+        terminal_statuses = {"completed", "skipped"}
+        retry_cooldown = timedelta(seconds=300)
+        now_naive = datetime.now(UTC).replace(tzinfo=None)
+        active: list[Episode] = []
+
+        for ep in episodes:
+            if ep.status in terminal_statuses:
+                continue
+            if ep.status in ("failed", "human_review"):
+                updated_at = ep.updated_at
+                if updated_at is None or now_naive - updated_at >= retry_cooldown:
+                    logger.info(
+                        "Auto-retrying episode {} of subscription {} from status={}",
+                        ep.episode_number,
+                        sub_id,
+                        ep.status,
+                    )
+                    ep.status = "pending"
+                    ep.error_log = None
+                    ep.human_input = None
+                    active.append(ep)
+                continue
+            active.append(ep)
 
         resume_times: list[datetime] = []
         for i, episode in enumerate(active):

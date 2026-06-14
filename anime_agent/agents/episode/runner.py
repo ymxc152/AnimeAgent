@@ -90,6 +90,7 @@ class EpisodeGraphRunner:
         rss_source_id = cast(int | None, subscription.rss_source_id)
         if rss_source_id is None:
             from anime_agent.config import settings
+
             if getattr(settings, "rss_default_url", None):
                 rss_source_id = 1
 
@@ -181,7 +182,9 @@ class EpisodeGraphRunner:
         self._set(episode, "status", final.get("status", episode.status))
         self._set(episode, "torrent_candidates", json.dumps(final.get("torrent_candidates", [])))
         # Use the actual qBittorrent hash as the single source of truth.
-        hash_value = final.get("torrent_hash") or (final.get("matched_torrent") or {}).get("info_hash")
+        hash_value = final.get("torrent_hash") or (final.get("matched_torrent") or {}).get(
+            "info_hash"
+        )
         self._set(episode, "torrent_hash", hash_value)
         self._set(episode, "torrent_name", final.get("torrent_name"))
         matched = final.get("matched_torrent") or {}
@@ -196,11 +199,16 @@ class EpisodeGraphRunner:
             "torrent_failed_hashes",
             json.dumps(final.get("torrent_failed_hashes", [])),
         )
-        self._set(episode, "metadata_verified", bool(final.get("verified") or final.get("classification")))
+        self._set(
+            episode, "metadata_verified", bool(final.get("verified") or final.get("classification"))
+        )
 
         errors = final.get("errors", [])
         if errors:
             self._set(episode, "error_log", "\n".join(str(e) for e in errors))
+        else:
+            # Success: clear any stale error log from previous failures.
+            self._set(episode, "error_log", None)
 
         await store.episodes.update(episode)
 
