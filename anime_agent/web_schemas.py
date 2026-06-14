@@ -14,6 +14,7 @@ class SubscriptionResponse(BaseModel):
     id: int
     bangumi_id: int | None
     anilist_id: int | None
+    tmdb_id: int | None
     title_romaji: str
     title_native: str | None
     title_chinese: str | None
@@ -35,6 +36,7 @@ class SubscriptionCreateRequest(BaseModel):
 
     bangumi_id: int | None = None
     anilist_id: int | None = None
+    tmdb_id: int | None = None
     title_romaji: str
     title_native: str | None = None
     title_chinese: str | None = None
@@ -59,6 +61,7 @@ class DiscoverySubscribeRequest(BaseModel):
 
     anilist_id: int | None = None
     bangumi_id: int | None = None
+    tmdb_id: int | None = None
     title_romaji: str
     title_native: str | None = None
     title_chinese: str | None = None
@@ -73,6 +76,7 @@ class AnimeLookupResponse(BaseModel):
 
     bangumi_id: int | None = None
     anilist_id: int | None = None
+    tmdb_id: int | None = None
     title_romaji: str | None = None
     title_native: str | None = None
     title_chinese: str | None = None
@@ -81,6 +85,12 @@ class AnimeLookupResponse(BaseModel):
     total_episodes: int | None = None
     season: str | None = None
     season_year: int | None = None
+
+
+class AnimeSearchResponse(BaseModel):
+    """Search results for anime title queries."""
+
+    candidates: list[AnimeLookupResponse]
 
 
 class HumanInputRequest(BaseModel):

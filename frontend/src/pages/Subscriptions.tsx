@@ -7,12 +7,13 @@ import {
   refreshSubscriptionMetadata,
   updateSubscription,
 } from '../api/client'
-import type { Subscription, SubscriptionCreateRequest } from '../types'
+import type { AnimeLookup, Subscription, SubscriptionCreateRequest } from '../types'
 import { useI18n } from '../i18n/useI18n'
 import { usePolling } from '../hooks/usePolling'
 import { useToast } from '../hooks/useToast'
-import { Card, Button, Input, Switch, Badge, Loading, EmptyState, Modal, Select } from '../components/ui'
-import { Plus, Trash2, ListVideo, RefreshCw } from 'lucide-react'
+import { AnimeSearchDialog } from '../components/AnimeSearchDialog'
+import { Card, Button, Input, Switch, Badge, Loading, EmptyState, Modal } from '../components/ui'
+import { Plus, Trash2, ListVideo, RefreshCw, Search } from 'lucide-react'
 
 const POLL_INTERVAL = 5000
 
@@ -26,10 +27,11 @@ const EMPTY_FORM: SubscriptionCreateRequest = {
   title_romaji: '',
   title_chinese: '',
   title_native: '',
-  total_episodes: 12,
+  total_episodes: undefined,
   auto_download_enabled: true,
   bangumi_id: null,
   anilist_id: null,
+  tmdb_id: null,
 }
 
 export function Subscriptions() {
@@ -41,9 +43,10 @@ export function Subscriptions() {
   const [error, setError] = useState<string | null>(null)
   const [showModal, setShowModal] = useState(false)
   const [form, setForm] = useState<SubscriptionCreateRequest>(EMPTY_FORM)
-  const [lookupSource, setLookupSource] = useState<'bangumi' | 'anilist'>('bangumi')
-  const [lookupId, setLookupId] = useState('')
+  const [formError, setFormError] = useState<string | null>(null)
   const [lookingUp, setLookingUp] = useState(false)
+  const [showSearchDialog, setShowSearchDialog] = useState(false)
+  const [totalEditable, setTotalEditable] = useState(false)
 
   const load = useCallback(async () => {
     setLoading(true)
@@ -64,37 +67,67 @@ export function Subscriptions() {
 
   async function handleSubmit(e: React.FormEvent) {
     e.preventDefault()
+    setFormError(null)
     try {
       await createSubscription(form)
       setForm(EMPTY_FORM)
       setShowModal(false)
+      setTotalEditable(false)
       await load()
+      showToast(t.subscriptions.lookupSuccess)
     } catch (err) {
-      setError(err instanceof Error ? err.message : t.subscriptions.createError)
+      setFormError(err instanceof Error ? err.message : t.subscriptions.createError)
+    }
+  }
+
+  function fillFormFromLookup(anime: AnimeLookup) {
+    setForm((prev) => ({
+      ...prev,
+      bangumi_id: anime.bangumi_id ?? prev.bangumi_id,
+      anilist_id: anime.anilist_id ?? prev.anilist_id,
+      tmdb_id: anime.tmdb_id ?? prev.tmdb_id,
+      title_romaji: anime.title_romaji || prev.title_romaji,
+      title_native: anime.title_native || prev.title_native,
+      title_chinese: anime.title_chinese || prev.title_chinese,
+      total_episodes: anime.total_episodes ?? prev.total_episodes,
+    }))
+    if (anime.total_episodes) {
+      setTotalEditable(false)
     }
   }
 
   async function handleLookup() {
-    const id = Number(lookupId)
-    if (!id) return
+    const bangumiId = form.bangumi_id
+    const anilistId = form.anilist_id
+    const tmdbId = form.tmdb_id
+    if (!bangumiId && !anilistId && !tmdbId) {
+      setFormError('请至少填写一个外部 ID')
+      return
+    }
     setLookingUp(true)
+    setFormError(null)
     try {
-      const anime = await lookupAnime(lookupSource, id)
-      setForm({
-        ...form,
-        bangumi_id: lookupSource === 'bangumi' ? id : anime.bangumi_id,
-        anilist_id: lookupSource === 'anilist' ? id : anime.anilist_id,
-        title_romaji: anime.title_romaji || form.title_romaji,
-        title_native: anime.title_native || form.title_native,
-        title_chinese: anime.title_chinese || form.title_chinese,
-        total_episodes: anime.total_episodes || form.total_episodes,
-      })
+      if (bangumiId) {
+        const anime = await lookupAnime('bangumi', bangumiId)
+        fillFormFromLookup(anime)
+      } else if (anilistId) {
+        const anime = await lookupAnime('anilist', anilistId)
+        fillFormFromLookup(anime)
+      } else if (tmdbId) {
+        const anime = await lookupAnime('tmdb', tmdbId)
+        fillFormFromLookup(anime)
+      }
       showToast(t.subscriptions.lookupSuccess)
     } catch (err) {
-      setError(err instanceof Error ? err.message : t.common.error)
+      setFormError(err instanceof Error ? err.message : t.common.error)
     } finally {
       setLookingUp(false)
     }
+  }
+
+  function handleSearchSelect(candidate: AnimeLookup) {
+    fillFormFromLookup(candidate)
+    showToast(t.subscriptions.lookupSuccess)
   }
 
   async function toggleAutoDownload(sub: Subscription) {
@@ -268,54 +301,16 @@ export function Subscriptions() {
           }
         >
           <form onSubmit={handleSubmit} className="grid grid-cols-1 gap-4">
+            {formError && (
+              <div className="rounded-xl border border-rose-200 bg-rose-50 px-4 py-3 text-sm text-rose-600 dark:border-rose-800 dark:bg-rose-950/30 dark:text-rose-400">
+                {formError}
+              </div>
+            )}
+
             <div className="rounded-xl border border-slate-100 bg-slate-50/50 p-3 dark:border-slate-800 dark:bg-slate-800/30">
               <p className="mb-2 text-xs font-medium text-slate-500 dark:text-slate-400">
                 {t.subscriptions.searchById}
               </p>
-              <div className="flex items-end gap-2">
-                <Select
-                  options={[
-                    { value: 'bangumi', label: 'Bangumi' },
-                    { value: 'anilist', label: 'AniList' },
-                  ]}
-                  value={lookupSource}
-                  onChange={(e) => setLookupSource(e.target.value as 'bangumi' | 'anilist')}
-                  className="!w-32"
-                />
-                <Input
-                  type="number"
-                  placeholder={t.subscriptions.idPlaceholder}
-                  value={lookupId}
-                  onChange={(e) => setLookupId(e.target.value)}
-                  className="flex-1"
-                />
-                <Button
-                  variant="secondary"
-                  onClick={handleLookup}
-                  isLoading={lookingUp}
-                  disabled={!lookupId}
-                >
-                  {t.subscriptions.lookup}
-                </Button>
-              </div>
-            </div>
-            <Input
-              placeholder={t.subscriptions.form.romajiTitle}
-              value={form.title_romaji}
-              onChange={(e) => setForm({ ...form, title_romaji: e.target.value })}
-              required
-            />
-            <Input
-              placeholder={t.subscriptions.form.chineseTitle}
-              value={form.title_chinese || ''}
-              onChange={(e) => setForm({ ...form, title_chinese: e.target.value })}
-            />
-            <Input
-              placeholder={t.subscriptions.form.nativeTitle}
-              value={form.title_native || ''}
-              onChange={(e) => setForm({ ...form, title_native: e.target.value })}
-            />
-            <div className="grid grid-cols-2 gap-4">
               <Input
                 type="number"
                 placeholder="Bangumi ID"
@@ -327,18 +322,81 @@ export function Subscriptions() {
                 placeholder="AniList ID"
                 value={form.anilist_id ?? ''}
                 onChange={(e) => setForm({ ...form, anilist_id: e.target.value ? Number(e.target.value) : null })}
+                className="mt-2"
+              />
+              <Input
+                type="number"
+                placeholder={t.subscriptions.tmdbId}
+                value={form.tmdb_id ?? ''}
+                onChange={(e) => setForm({ ...form, tmdb_id: e.target.value ? Number(e.target.value) : null })}
+                className="mt-2"
               />
             </div>
+
             <Input
-              type="number"
-              placeholder={t.subscriptions.form.totalEpisodes}
-              value={form.total_episodes ?? ''}
-              onChange={(e) => setForm({ ...form, total_episodes: Number(e.target.value) })}
+              placeholder={t.subscriptions.form.chineseTitle}
+              value={form.title_chinese || ''}
+              onChange={(e) => setForm({ ...form, title_chinese: e.target.value })}
+            />
+            <Input
+              placeholder={t.subscriptions.form.nativeTitle}
+              value={form.title_native || ''}
+              onChange={(e) => setForm({ ...form, title_native: e.target.value })}
+            />
+            <Input
+              placeholder={t.subscriptions.form.romajiTitle}
+              value={form.title_romaji}
+              onChange={(e) => setForm({ ...form, title_romaji: e.target.value })}
               required
             />
+
+            <div className="flex items-end gap-2">
+              <Input
+                type="number"
+                placeholder={t.subscriptions.form.totalEpisodes}
+                value={form.total_episodes ?? ''}
+                onChange={(e) => setForm({ ...form, total_episodes: e.target.value ? Number(e.target.value) : undefined })}
+                disabled={!totalEditable}
+                className="flex-1"
+              />
+              <Button
+                type="button"
+                variant="secondary"
+                size="sm"
+                onClick={() => setTotalEditable((v) => !v)}
+              >
+                {totalEditable ? t.common.lock : t.common.edit}
+              </Button>
+            </div>
+
+            <div className="flex flex-col gap-2 sm:flex-row">
+              <Button
+                type="button"
+                variant="secondary"
+                onClick={() => void handleLookup()}
+                isLoading={lookingUp}
+                disabled={!form.bangumi_id && !form.anilist_id && !form.tmdb_id}
+              >
+                {t.subscriptions.lookup}
+              </Button>
+              <Button
+                type="button"
+                variant="primary"
+                onClick={() => setShowSearchDialog(true)}
+              >
+                <Search className="h-4 w-4" />
+                {t.subscriptions.searchByTitle}
+              </Button>
+            </div>
           </form>
         </Modal>
       )}
+
+      <AnimeSearchDialog
+        open={showSearchDialog}
+        onClose={() => setShowSearchDialog(false)}
+        onSelect={handleSearchSelect}
+      />
     </div>
   )
 }

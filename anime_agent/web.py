@@ -26,8 +26,10 @@ from anime_agent.services.series_metadata_resolver import SeriesMetadataResolver
 from anime_agent.tools.anilist_tool import AniListTool, AniListToolInput
 from anime_agent.tools.bangumi_tool import BangumiTool, BangumiToolInput
 from anime_agent.tools.base import BaseTool
+from anime_agent.tools.tmdb_tool import TMDBTool, TMDBToolInput
 from anime_agent.web_schemas import (
     AnimeLookupResponse,
+    AnimeSearchResponse,
     AutoSubscribeRuleCreateRequest,
     AutoSubscribeRuleResponse,
     AutoSubscribeRuleUpdateRequest,
@@ -125,6 +127,7 @@ async def _create_subscription_from_payload(
     subscription = Subscription(
         bangumi_id=payload.bangumi_id or details.get("bangumi_id"),
         anilist_id=payload.anilist_id or details.get("anilist_id"),
+        tmdb_id=payload.tmdb_id or details.get("tmdb_id"),
         title_romaji=title_romaji,
         title_native=title_native,
         title_chinese=title_chinese,
@@ -538,8 +541,8 @@ async def anime_lookup(
 ) -> AnimeLookupResponse:
     """Look up anime metadata by Bangumi or AniList ID."""
     if source == "bangumi":
-        tool = BangumiTool()
-        result = await tool.invoke(BangumiToolInput(action="details", subject_id=id))
+        bangumi_tool = BangumiTool()
+        result = await bangumi_tool.invoke(BangumiToolInput(action="details", subject_id=id))
         if not result.success:
             raise HTTPException(status_code=502, detail=result.error)
         subject = result.data.get("subject", {})
@@ -555,8 +558,8 @@ async def anime_lookup(
             season_year=subject.get("season_year"),
         )
     if source == "anilist":
-        tool = AniListTool()
-        result = await tool.invoke(AniListToolInput(action="details", media_id=id))
+        anilist_tool = AniListTool()
+        result = await anilist_tool.invoke(AniListToolInput(action="details", media_id=id))
         if not result.success:
             raise HTTPException(status_code=502, detail=result.error)
         media = result.data.get("media", {})
@@ -570,7 +573,30 @@ async def anime_lookup(
             season=media.get("season"),
             season_year=media.get("season_year"),
         )
+    if source == "tmdb":
+        tmdb_tool = TMDBTool()
+        result = await tmdb_tool.invoke(TMDBToolInput(action="details", tmdb_id=id))
+        if not result.success:
+            raise HTTPException(status_code=502, detail=result.error)
+        show = result.data.get("show", {})
+        return AnimeLookupResponse(
+            tmdb_id=show.get("tmdb_id"),
+            title_romaji=show.get("name"),
+            title_native=show.get("name"),
+            total_episodes=show.get("number_of_episodes"),
+        )
     raise HTTPException(status_code=400, detail=f"Unsupported source: {source}")
+
+
+@app.get("/api/anime/search", response_model=AnimeSearchResponse)
+async def anime_search(query: str) -> AnimeSearchResponse:
+    """Search for anime candidates by title across Bangumi and AniList."""
+    resolver = MetadataResolver()
+    result = await resolver.search(query)
+    if not result.success:
+        raise HTTPException(status_code=502, detail=result.error)
+    candidates = result.data.get("candidates", [])
+    return AnimeSearchResponse(candidates=candidates)
 
 
 @app.get("/api/discovery/season")

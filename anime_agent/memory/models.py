@@ -28,6 +28,7 @@ class Subscription(Base):
     id = Column(Integer, primary_key=True)
     bangumi_id = Column(Integer, unique=True, index=True)
     anilist_id = Column(Integer, unique=True, index=True)
+    tmdb_id = Column(Integer, unique=True, index=True)
     title_romaji = Column(String, nullable=False)
     title_native = Column(String)
     title_chinese = Column(String)

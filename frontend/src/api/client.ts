@@ -1,6 +1,7 @@
 import axios, { AxiosError } from 'axios'
 import type {
   AnimeLookup,
+  AnimeSearchResponse,
   AutoSubscribeRule,
   AutoSubscribeRuleCreateRequest,
   AutoSubscribeRuleUpdateRequest,
@@ -97,8 +98,13 @@ export async function submitHumanInput(
   return data
 }
 
-export async function lookupAnime(source: 'bangumi' | 'anilist', id: number): Promise<AnimeLookup> {
+export async function lookupAnime(source: 'bangumi' | 'anilist' | 'tmdb', id: number): Promise<AnimeLookup> {
   const { data } = await api.get('/anime/lookup', { params: { source, id } })
+  return data
+}
+
+export async function searchAnime(query: string): Promise<AnimeSearchResponse> {
+  const { data } = await api.get('/anime/search', { params: { query } })
   return data
 }
 

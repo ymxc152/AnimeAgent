@@ -40,6 +40,22 @@ _Avoid_: 所有弹窗都用同一个尺寸
 Modal 打开时禁止底层页面滚动，并将交互限制在弹窗内；关闭后恢复滚动。
 _Avoid_: 背景还能滚动、底层可点击
 
+**外部 ID (External ID)**
+用于关联第三方元数据源的标识符：Bangumi ID、AniList ID、TMDB ID。在新增订阅时作为可选字段填写，用于自动拉取标题、集数等元数据。
+_Avoid_: 平台 ID、源 ID
+
+**ID 查询 (ID Lookup)**
+根据已填写的外部 ID 向对应元数据源请求详情，并将结果回填到表单标题、集数字段。
+_Avoid_: ID 搜索、自动填充
+
+**标题搜索 (Title Search)**
+根据用户输入的标题文本，在 Bangumi / AniList 中搜索候选作品，结果供用户选择后回填表单。
+_Avoid_: 名称搜索、文本查询
+
+**候选弹窗 (Candidate Dialog)**
+标题搜索后展示结果列表的次级 Modal / Drawer。用户点击候选条目后，将其外部 ID 和多语言标题回填到新增订阅表单。
+_Avoid_: 结果弹窗、选择抽屉
+
 ## Example dialogue
 
 > Dev: “Discovery 页面有两个 FAB，左下角刷新、右下角新增规则，会挡住最后一行内容。我想把刷新放到顶部导航栏，新增规则放到页面标题行。”

@@ -19,6 +19,8 @@ def _migrate_subscriptions_columns(connection: Any) -> None:
         connection.execute(text("ALTER TABLE subscriptions ADD COLUMN season_number INTEGER DEFAULT 1"))
     if "fallback_to_resource_search" not in columns:
         connection.execute(text("ALTER TABLE subscriptions ADD COLUMN fallback_to_resource_search BOOLEAN DEFAULT 1"))
+    if "tmdb_id" not in columns:
+        connection.execute(text("ALTER TABLE subscriptions ADD COLUMN tmdb_id INTEGER"))
 
 
 def _migrate_episodes_columns(connection: Any) -> None:

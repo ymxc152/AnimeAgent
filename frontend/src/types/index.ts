@@ -2,6 +2,7 @@ export interface Subscription {
   id: number
   bangumi_id: number | null
   anilist_id: number | null
+  tmdb_id: number | null
   title_romaji: string
   title_native: string | null
   title_chinese: string | null
@@ -101,6 +102,7 @@ export interface DiscoveryAnime {
 export interface AnimeLookup {
   bangumi_id: number | null
   anilist_id: number | null
+  tmdb_id: number | null
   title_romaji: string | null
   title_native: string | null
   title_chinese: string | null
@@ -119,6 +121,7 @@ export interface HumanInputRequest {
 export interface SubscriptionCreateRequest {
   bangumi_id?: number | null
   anilist_id?: number | null
+  tmdb_id?: number | null
   title_romaji: string
   title_native?: string | null
   title_chinese?: string | null
@@ -174,3 +177,7 @@ export interface AutoSubscribeRuleCreateRequest {
 }
 
 export type AutoSubscribeRuleUpdateRequest = Partial<AutoSubscribeRuleCreateRequest>
+
+export interface AnimeSearchResponse {
+  candidates: AnimeLookup[]
+}
