@@ -289,9 +289,7 @@ class ChatMessageStore:
         await self.session.refresh(msg)
         return msg
 
-    async def list_by_session(
-        self, session_id: str, limit: int = 20
-    ) -> list[ChatMessage]:
+    async def list_by_session(self, session_id: str, limit: int = 20) -> list[ChatMessage]:
         result = await self.session.execute(
             select(ChatMessage)
             .where(ChatMessage.session_id == session_id)

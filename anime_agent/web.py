@@ -22,6 +22,7 @@ from anime_agent.memory.models import AutoSubscribeRule, Episode, RSSSource, Sub
 from anime_agent.memory.store import Store
 from anime_agent.services.content_filter import ContentFilter, FilterRules
 from anime_agent.services.metadata_resolver import MetadataResolver
+from anime_agent.services.notification_service import NotificationService
 from anime_agent.services.series_metadata_resolver import SeriesMetadataResolver
 from anime_agent.tools.anilist_tool import AniListTool, AniListToolInput
 from anime_agent.tools.bangumi_tool import BangumiTool, BangumiToolInput
@@ -41,6 +42,8 @@ from anime_agent.web_schemas import (
     EpisodeDetailResponse,
     EpisodeResponse,
     HumanInputRequest,
+    NotificationChannelResponse,
+    NotificationTestRequest,
     RSSSourceCreateRequest,
     RSSSourceResponse,
     RSSSourceUpdateRequest,
@@ -180,6 +183,33 @@ async def health() -> dict[str, str]:
     return {"status": "ok"}
 
 
+@app.get("/api/notifications/channels")
+async def list_notification_channels() -> list[NotificationChannelResponse]:
+    """Return configured notification channels (target is hidden)."""
+    service = NotificationService()
+    return [
+        NotificationChannelResponse(
+            name=c.name,
+            type=c.channel_type,
+            events=c.events,
+            enabled=c.enabled,
+        )
+        for c in service.list_channels()
+    ]
+
+
+@app.post("/api/notifications/test")
+async def test_notification(payload: NotificationTestRequest) -> dict[str, Any]:
+    """Send a test notification through all matching channels."""
+    service = NotificationService()
+    results = await service.send(
+        event_type=payload.event_type,
+        title=payload.title,
+        body=payload.body,
+    )
+    return {"results": results}
+
+
 @app.get("/api/stats")
 async def stats(db: AsyncSession = Depends(get_db)) -> dict[str, Any]:
     """Return aggregate counts for subscriptions and episodes."""
@@ -222,9 +252,7 @@ async def chat(payload: ChatRequest, db: AsyncSession = Depends(get_db)) -> Chat
 
 
 @app.get("/api/chat/history", response_model=ChatHistoryResponse)
-async def chat_history(
-    session_id: str, db: AsyncSession = Depends(get_db)
-) -> ChatHistoryResponse:
+async def chat_history(session_id: str, db: AsyncSession = Depends(get_db)) -> ChatHistoryResponse:
     """Return conversation history for a session."""
     import json
 
@@ -266,7 +294,9 @@ async def list_subscriptions(db: AsyncSession = Depends(get_db)) -> list[dict[st
             Subscription,
             func.count(Episode.id).label("ep_total"),
             func.count(Episode.id).filter(Episode.status == "completed").label("ep_completed"),
-            func.count(Episode.id).filter(Episode.status.in_(downloaded_statuses)).label("ep_downloaded"),
+            func.count(Episode.id)
+            .filter(Episode.status.in_(downloaded_statuses))
+            .label("ep_downloaded"),
             func.count(Episode.id).filter(Episode.status == "failed").label("ep_failed"),
             func.count(Episode.id).filter(Episode.status == "pending").label("ep_pending"),
         )
@@ -337,7 +367,9 @@ async def update_subscription(
     return subscription
 
 
-@app.post("/api/subscriptions/{subscription_id}/refresh-metadata", response_model=SubscriptionResponse)
+@app.post(
+    "/api/subscriptions/{subscription_id}/refresh-metadata", response_model=SubscriptionResponse
+)
 async def refresh_subscription_metadata(
     subscription_id: int, db: AsyncSession = Depends(get_db)
 ) -> Subscription:
@@ -354,9 +386,7 @@ async def refresh_subscription_metadata(
         anilist_id = cast(int | None, subscription.anilist_id)
         title_romaji = cast(str | None, subscription.title_romaji)
         if bangumi_id or anilist_id:
-            result = await resolver.get_details(
-                bangumi_id=bangumi_id, anilist_id=anilist_id
-            )
+            result = await resolver.get_details(bangumi_id=bangumi_id, anilist_id=anilist_id)
             if result.success:
                 details = result.data.get("details", {})
         elif title_romaji:
@@ -426,9 +456,7 @@ async def list_episodes(
     sub_ids = {cast(int, ep.subscription_id) for ep in episodes}
     subs: dict[int, Subscription] = {}
     if sub_ids:
-        sub_result = await db.execute(
-            select(Subscription).where(Subscription.id.in_(sub_ids))
-        )
+        sub_result = await db.execute(select(Subscription).where(Subscription.id.in_(sub_ids)))
         subs = {cast(int, s.id): s for s in sub_result.scalars().all()}
 
     output: list[dict[str, Any]] = []
@@ -438,35 +466,44 @@ async def list_episodes(
         if ep.torrent_candidates:
             try:
                 import json
+
                 candidates = json.loads(cast(str, ep.torrent_candidates))
             except json.JSONDecodeError:
                 pass
-        output.append({
-            "id": ep.id,
-            "subscription_id": ep.subscription_id,
-            "subscription_title": sub.title_chinese or sub.title_native or sub.title_romaji if sub else None,
-            "episode_number": ep.episode_number,
-            "title": ep.title,
-            "aired_at": ep.aired_at.isoformat() if ep.aired_at else None,
-            "status": ep.status,
-            "content_type": ep.content_type,
-            "torrent_hash": ep.torrent_hash,
-            "torrent_title": ep.torrent_title,
-            "torrent_name": ep.torrent_name,
-            "torrent_link": ep.torrent_link,
-            "torrent_status": ep.torrent_status,
-            "torrent_last_speed": ep.torrent_last_speed or 0.0,
-            "torrent_progress": ep.torrent_progress or 0.0,
-            "torrent_added_at": ep.torrent_added_at.isoformat() if ep.torrent_added_at else None,
-            "torrent_checked_at": ep.torrent_checked_at.isoformat() if ep.torrent_checked_at else None,
-            "download_path": ep.download_path,
-            "organized_path": ep.organized_path,
-            "metadata_verified": ep.metadata_verified,
-            "error_log": ep.error_log,
-            "torrent_candidates_count": len(candidates),
-            "created_at": ep.created_at.isoformat() if ep.created_at else None,
-            "updated_at": ep.updated_at.isoformat() if ep.updated_at else None,
-        })
+        output.append(
+            {
+                "id": ep.id,
+                "subscription_id": ep.subscription_id,
+                "subscription_title": sub.title_chinese or sub.title_native or sub.title_romaji
+                if sub
+                else None,
+                "episode_number": ep.episode_number,
+                "title": ep.title,
+                "aired_at": ep.aired_at.isoformat() if ep.aired_at else None,
+                "status": ep.status,
+                "content_type": ep.content_type,
+                "torrent_hash": ep.torrent_hash,
+                "torrent_title": ep.torrent_title,
+                "torrent_name": ep.torrent_name,
+                "torrent_link": ep.torrent_link,
+                "torrent_status": ep.torrent_status,
+                "torrent_last_speed": ep.torrent_last_speed or 0.0,
+                "torrent_progress": ep.torrent_progress or 0.0,
+                "torrent_added_at": ep.torrent_added_at.isoformat()
+                if ep.torrent_added_at
+                else None,
+                "torrent_checked_at": ep.torrent_checked_at.isoformat()
+                if ep.torrent_checked_at
+                else None,
+                "download_path": ep.download_path,
+                "organized_path": ep.organized_path,
+                "metadata_verified": ep.metadata_verified,
+                "error_log": ep.error_log,
+                "torrent_candidates_count": len(candidates),
+                "created_at": ep.created_at.isoformat() if ep.created_at else None,
+                "updated_at": ep.updated_at.isoformat() if ep.updated_at else None,
+            }
+        )
 
     return output
 
@@ -485,6 +522,7 @@ async def get_episode_detail(episode_id: int, db: AsyncSession = Depends(get_db)
     if episode.torrent_candidates:
         try:
             import json
+
             candidates = json.loads(cast(str, episode.torrent_candidates))
         except json.JSONDecodeError:
             pass
@@ -493,6 +531,7 @@ async def get_episode_detail(episode_id: int, db: AsyncSession = Depends(get_db)
     if episode.torrent_failed_hashes:
         try:
             import json
+
             failed_hashes = json.loads(cast(str, episode.torrent_failed_hashes))
         except json.JSONDecodeError:
             pass
@@ -513,8 +552,12 @@ async def get_episode_detail(episode_id: int, db: AsyncSession = Depends(get_db)
         "torrent_status": episode.torrent_status,
         "torrent_last_speed": episode.torrent_last_speed or 0.0,
         "torrent_progress": episode.torrent_progress or 0.0,
-        "torrent_added_at": episode.torrent_added_at.isoformat() if episode.torrent_added_at else None,
-        "torrent_checked_at": episode.torrent_checked_at.isoformat() if episode.torrent_checked_at else None,
+        "torrent_added_at": episode.torrent_added_at.isoformat()
+        if episode.torrent_added_at
+        else None,
+        "torrent_checked_at": episode.torrent_checked_at.isoformat()
+        if episode.torrent_checked_at
+        else None,
         "download_path": episode.download_path,
         "organized_path": episode.organized_path,
         "metadata_verified": episode.metadata_verified,

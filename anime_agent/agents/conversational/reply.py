@@ -32,14 +32,14 @@ def format_reply(
     # --- Help ---
     if action == "help":
         return (
-            '我可以帮你：\n'
-            '- 查看追番列表和下载进度\n'
-            '- 查看某部番的详细信息\n'
-            '- 查看等待种子或需要审核的剧集\n'
-            '- 查看失败的下载任务\n'
+            "我可以帮你：\n"
+            "- 查看追番列表和下载进度\n"
+            "- 查看某部番的详细信息\n"
+            "- 查看等待种子或需要审核的剧集\n"
+            "- 查看失败的下载任务\n"
             '- 订阅新番（说"订阅 作品名"）\n'
             '- 重试失败的下载（说"重试 作品名"）\n'
-            '试试直接问我吧！'
+            "试试直接问我吧！"
         )
 
     # --- Subscribe: show search candidates ---
@@ -48,7 +48,12 @@ def format_reply(
             return f'没有找到与"{title}"相关的番剧，换个关键词试试？'
         lines = [f'找到以下与"{title}"相关的番剧：']
         for i, item in enumerate(data, 1):
-            t = item.get("title_chinese") or item.get("title_romaji") or item.get("title_native") or "未知"
+            t = (
+                item.get("title_chinese")
+                or item.get("title_romaji")
+                or item.get("title_native")
+                or "未知"
+            )
             year = item.get("season_year") or ""
             eps = item.get("total_episodes") or "?"
             lines.append(f"{i}. 《{t}》 ({year}) — {eps} 集")
@@ -82,9 +87,7 @@ def format_reply(
     return '我没太听懂，你可以换种方式问我。试试说"帮助"看看我能做什么。'
 
 
-def _format_query_reply(
-    query_type: str, data: Any, title: str | None = None
-) -> str:
+def _format_query_reply(query_type: str, data: Any, title: str | None = None) -> str:
     """Format reply for query_status sub-types."""
     if data is None:
         return "你还没有订阅这部番，需要我帮你找一下吗？"
@@ -118,9 +121,7 @@ def _format_query_reply(
             return "当前没有等待种子或人工审核的剧集。"
         lines = ["以下剧集还在等种子或审核："]
         for item in data:
-            lines.append(
-                f"- 《{item['title']}》第 {item['episode_number']} 集（{item['status']}）"
-            )
+            lines.append(f"- 《{item['title']}》第 {item['episode_number']} 集（{item['status']}）")
         return "\n".join(lines)
 
     if query_type == "anime_info":
@@ -213,4 +214,5 @@ async def llm_polish(
     except Exception:  # noqa: BLE001
         pass
 
-    return None
+    # Fallback to template reply
+    return structured_reply

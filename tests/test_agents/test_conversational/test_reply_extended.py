@@ -20,8 +20,18 @@ class TestHelp:
 class TestSubscribe:
     def test_shows_candidates(self):
         data = [
-            {"title_chinese": "葬送的芙莉莲", "title_romaji": "Frieren", "season_year": 2023, "total_episodes": 28},
-            {"title_chinese": "进击的巨人", "title_romaji": "AoT", "season_year": 2013, "total_episodes": 25},
+            {
+                "title_chinese": "葬送的芙莉莲",
+                "title_romaji": "Frieren",
+                "season_year": 2023,
+                "total_episodes": 28,
+            },
+            {
+                "title_chinese": "进击的巨人",
+                "title_romaji": "AoT",
+                "season_year": 2013,
+                "total_episodes": 25,
+            },
         ]
         reply = format_reply("subscribe", data, title="芙莉莲")
         assert "葬送的芙莉莲" in reply
@@ -82,7 +92,13 @@ class TestQueryStatus:
         assert "没有在追" in reply
 
     def test_subscription_detail(self):
-        data = {"title": "Frieren", "total_episodes": 28, "completed": 20, "failed": 2, "pending": 6}
+        data = {
+            "title": "Frieren",
+            "total_episodes": 28,
+            "completed": 20,
+            "failed": 2,
+            "pending": 6,
+        }
         reply = format_reply("query_status", data, query_type="subscription_detail")
         assert "共 28 集" in reply
 
@@ -124,26 +140,24 @@ class TestLLMPolish:
             data={"text": "你正在追的番有芙莉莲，已经看了10集了。"},
         )
 
-        result = await llm_polish(
-            mock_llm, "我在追什么番", "模板回复", [{"title": "Frieren"}]
-        )
+        result = await llm_polish(mock_llm, "我在追什么番", "模板回复", [{"title": "Frieren"}])
         assert result == "你正在追的番有芙莉莲，已经看了10集了。"
 
-    async def test_returns_none_on_llm_failure(self):
+    async def test_falls_back_on_llm_failure(self):
         mock_llm = AsyncMock()
         mock_llm.invoke.return_value = MagicMock(success=False, error="API error")
 
         result = await llm_polish(mock_llm, "test", "模板回复", None)
-        assert result is None
+        assert result == "模板回复"
 
-    async def test_returns_none_on_exception(self):
+    async def test_falls_back_on_exception(self):
         mock_llm = AsyncMock()
         mock_llm.invoke.side_effect = Exception("Network error")
 
         result = await llm_polish(mock_llm, "test", "模板回复", None)
-        assert result is None
+        assert result == "模板回复"
 
-    async def test_returns_none_when_polished_same_as_template(self):
+    async def test_falls_back_when_polished_same_as_template(self):
         mock_llm = AsyncMock()
         mock_llm.invoke.return_value = MagicMock(
             success=True,
@@ -151,4 +165,4 @@ class TestLLMPolish:
         )
 
         result = await llm_polish(mock_llm, "test", "模板回复", None)
-        assert result is None
+        assert result == "模板回复"

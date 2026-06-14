@@ -13,10 +13,12 @@ async def test_chat_lists_active_subscriptions(client, db_session):
     )
     db_session.add(sub)
     await db_session.flush()
-    db_session.add_all([
-        Episode(subscription_id=sub.id, episode_number=1, status="completed"),
-        Episode(subscription_id=sub.id, episode_number=2, status="pending"),
-    ])
+    db_session.add_all(
+        [
+            Episode(subscription_id=sub.id, episode_number=1, status="completed"),
+            Episode(subscription_id=sub.id, episode_number=2, status="pending"),
+        ]
+    )
     await db_session.commit()
 
     response = await client.post("/api/chat", json={"message": "我在下载哪些番？"})
@@ -37,10 +39,12 @@ async def test_chat_subscription_detail(client, db_session):
     )
     db_session.add(sub)
     await db_session.flush()
-    db_session.add_all([
-        Episode(subscription_id=sub.id, episode_number=1, status="completed"),
-        Episode(subscription_id=sub.id, episode_number=2, status="pending"),
-    ])
+    db_session.add_all(
+        [
+            Episode(subscription_id=sub.id, episode_number=1, status="completed"),
+            Episode(subscription_id=sub.id, episode_number=2, status="pending"),
+        ]
+    )
     await db_session.commit()
 
     response = await client.post("/api/chat", json={"message": "《葬送的芙莉莲》下完了吗？"})

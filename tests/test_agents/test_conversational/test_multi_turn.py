@@ -1,6 +1,5 @@
 """Tests for multi-turn dialogue and session management."""
 
-
 from anime_agent.agents.conversational.agent import ConversationalAgent
 from anime_agent.memory.models import Episode, Subscription
 
@@ -79,10 +78,14 @@ async def test_retry_episode(db_session):
     )
     db_session.add(sub)
     await db_session.flush()
-    db_session.add_all([
-        Episode(subscription_id=sub.id, episode_number=1, status="completed"),
-        Episode(subscription_id=sub.id, episode_number=2, status="failed", error_log="some error"),
-    ])
+    db_session.add_all(
+        [
+            Episode(subscription_id=sub.id, episode_number=1, status="completed"),
+            Episode(
+                subscription_id=sub.id, episode_number=2, status="failed", error_log="some error"
+            ),
+        ]
+    )
     await db_session.commit()
 
     agent = ConversationalAgent(db_session)

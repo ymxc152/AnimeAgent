@@ -14,10 +14,12 @@ async def test_agent_replies_with_subscription_detail(db_session):
     )
     db_session.add(sub)
     await db_session.flush()
-    db_session.add_all([
-        Episode(subscription_id=sub.id, episode_number=1, status="completed"),
-        Episode(subscription_id=sub.id, episode_number=2, status="pending"),
-    ])
+    db_session.add_all(
+        [
+            Episode(subscription_id=sub.id, episode_number=1, status="completed"),
+            Episode(subscription_id=sub.id, episode_number=2, status="pending"),
+        ]
+    )
     await db_session.commit()
 
     agent = ConversationalAgent(db_session)

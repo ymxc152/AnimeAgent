@@ -248,3 +248,20 @@ class ChatHistoryResponse(BaseModel):
 
     session_id: str
     messages: list[ChatMessageResponse]
+
+
+class NotificationChannelResponse(BaseModel):
+    """A notification channel as exposed to the frontend."""
+
+    name: str
+    type: str
+    events: list[str]
+    enabled: bool
+
+
+class NotificationTestRequest(BaseModel):
+    """Payload to send a test notification."""
+
+    event_type: str = "generic"
+    title: str = "AnimeAgent Test"
+    body: str = "这是一条测试消息"

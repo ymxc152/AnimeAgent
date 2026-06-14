@@ -1,7 +1,6 @@
 """Extended tests for chat API endpoints: session management and history."""
 
 
-
 async def test_chat_returns_session_id(client):
     """POST /api/chat should return a session_id."""
     response = await client.post("/api/chat", json={"message": "帮助"})

@@ -114,15 +114,18 @@ def parse_intent(text: str) -> ParsedIntent:
         return ParsedIntent("query_status", query_type="pending_torrents")
 
     # --- Failed tasks ---
-    if any(
-        kw in lowered
-        for kw in (
-            "失败",
-            "failed",
-            "报错",
-            "出错",
+    if (
+        any(
+            kw in lowered
+            for kw in (
+                "失败",
+                "failed",
+                "报错",
+                "出错",
+            )
         )
-    ) and "下完了" not in lowered:
+        and "下完了" not in lowered
+    ):
         return ParsedIntent("query_status", query_type="failed_tasks")
 
     # --- Subscription detail / progress ---
@@ -243,7 +246,7 @@ def _extract_title(text: str) -> str | None:
     ]
     for prefix in prefixes:
         if text.startswith(prefix):
-            rest = text[len(prefix):].strip()
+            rest = text[len(prefix) :].strip()
             if rest:
                 return rest
 

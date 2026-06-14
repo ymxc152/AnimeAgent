@@ -59,13 +59,8 @@ class ConversationalAgent:
         )
 
         # 2. Load recent history for context
-        history_msgs = await self.store.chat_messages.list_by_session(
-            session_id, limit=20
-        )
-        history = [
-            {"role": str(m.role), "content": str(m.content)}
-            for m in history_msgs
-        ]
+        history_msgs = await self.store.chat_messages.list_by_session(session_id, limit=20)
+        history = [{"role": str(m.role), "content": str(m.content)} for m in history_msgs]
 
         # 3. Determine current chat state from last assistant message
         chat_state = STATE_IDLE
@@ -105,9 +100,7 @@ class ConversationalAgent:
             data, next_state = await self._handle_subscribe(intent.title)
 
         elif intent.action == "select_candidate":
-            data = await self._handle_select(
-                intent.selection_index, history_msgs
-            )
+            data = await self._handle_select(intent.selection_index, history_msgs)
             if data and data.get("success"):
                 next_state = STATE_IDLE
             elif data is None:
@@ -176,9 +169,7 @@ class ConversationalAgent:
             return await self.query_service.failed_tasks()
         return None
 
-    async def _handle_subscribe(
-        self, title: str | None
-    ) -> tuple[Any, str]:
+    async def _handle_subscribe(self, title: str | None) -> tuple[Any, str]:
         """Search for anime candidates and enter CONFIRMING state."""
         if not title:
             return None, STATE_IDLE
@@ -231,9 +222,7 @@ class ConversationalAgent:
 
             from anime_agent.web import _create_subscription_from_payload
 
-            sub = await _create_subscription_from_payload(
-                self.session, payload, source="chat"
-            )
+            sub = await _create_subscription_from_payload(self.session, payload, source="chat")
             title = sub.title_chinese or sub.title_native or sub.title_romaji
             return {
                 "success": True,
@@ -244,9 +233,7 @@ class ConversationalAgent:
             logger.warning("Subscribe failed: {}", exc)
             return {"success": False, "error": str(exc)}
 
-    async def _handle_retry(
-        self, title: str | None, episode_number: int | None
-    ) -> dict[str, Any]:
+    async def _handle_retry(self, title: str | None, episode_number: int | None) -> dict[str, Any]:
         """Reset an episode to pending for retry."""
         if not title:
             return {"success": False, "error": "请指定要重试的番名"}

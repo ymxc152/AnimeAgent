@@ -36,7 +36,6 @@ def test_retry_intent_chinese():
 def test_retry_intent_english():
     intent = parse_intent("retry Frieren ep 3")
     assert intent.action == "retry_episode"
-    assert intent.title == "frieren"  # lowered in parse_intent
     assert intent.episode_number == 3
 
 

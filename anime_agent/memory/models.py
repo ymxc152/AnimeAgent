@@ -206,7 +206,9 @@ class ErrorLog(Base):
     subscription_id = Column(Integer, index=True)
     node_name = Column(String, nullable=False)
     error_message = Column(Text)
-    bash_commands_tried = Column(Text)  # JSON: [{"command": "...", "output": "...", "success": bool}]
+    bash_commands_tried = Column(
+        Text
+    )  # JSON: [{"command": "...", "output": "...", "success": bool}]
     llm_reasoning = Column(Text)
     resolution = Column(String)  # "bash_fixed" / "retry_success" / "skip" / "exhausted"
     created_at = Column(DateTime, default=datetime.utcnow)
