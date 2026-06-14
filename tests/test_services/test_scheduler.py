@@ -13,6 +13,16 @@ from anime_agent.services.scheduler import PreFlightHealthCheckError, Scheduler
 from anime_agent.tools.base import BaseTool, ToolOutput
 
 
+@pytest.fixture(autouse=True)
+def _mock_qb_sync(monkeypatch):
+    """Prevent scheduler tick from hitting a real qBittorrent instance."""
+
+    async def _fake_sync(*args, **kwargs):
+        return {"updated": 0}
+
+    monkeypatch.setattr("anime_agent.services.scheduler.QBSyncService.sync", _fake_sync)
+
+
 class _HealthyTool(BaseTool):
     name = "healthy"
 
@@ -300,3 +310,104 @@ async def test_start_passes_preflight_and_registers_jobs():
     scheduler.bootstrap_schedules.assert_awaited_once()
     assert mock_scheduler.add_job.call_count == 2
     mock_scheduler.start.assert_called_once()
+
+
+async def test_tick_auto_retries_failed_and_human_review_after_cooldown(db_session):
+    """Failed/human_review episodes older than the cooldown should be retried."""
+    store = Store(db_session)
+    sub = Subscription(
+        title_romaji="Retry Anime",
+        status="ongoing",
+    )
+    await store.subscriptions.create(sub)
+
+    now = datetime.now(UTC)
+    failed_ep = Episode(
+        subscription_id=sub.id,
+        episode_number=1,
+        status="failed",
+        updated_at=now - timedelta(seconds=301),
+        error_log="old error",
+    )
+    human_ep = Episode(
+        subscription_id=sub.id,
+        episode_number=2,
+        status="human_review",
+        updated_at=now - timedelta(seconds=301),
+        human_input="old input",
+    )
+    pending_ep = Episode(
+        subscription_id=sub.id,
+        episode_number=3,
+        status="schedule_resume",
+        updated_at=now - timedelta(seconds=301),
+    )
+    await store.episodes.create(failed_ep)
+    await store.episodes.create(human_ep)
+    await store.episodes.create(pending_ep)
+
+    schedule = TaskSchedule(
+        subscription_id=sub.id,
+        next_run_at=now - timedelta(minutes=5),
+    )
+    await store.schedules.create(schedule)
+
+    executor = AsyncMock(return_value={"status": "pending"})
+    scheduler = Scheduler(
+        session_factory=MagicMock(),
+        health_check=HealthCheck(tools=[]),
+        planner=EpisodePlanner(),
+        executor=executor,
+    )
+
+    await scheduler.tick(session=db_session)
+
+    # Episodes should be reset to pending and executor invoked for all three.
+    calls = {call.args for call in executor.await_args_list}
+    assert (sub.id, 1) in calls
+    assert (sub.id, 2) in calls
+    assert (sub.id, 3) in calls
+
+    updated = await store.episodes.list_by_subscription(sub.id)
+    by_number = {ep.episode_number: ep for ep in updated}
+    assert by_number[1].status == "pending"
+    assert by_number[1].error_log is None
+    assert by_number[2].status == "pending"
+    assert by_number[2].human_input is None
+
+
+async def test_tick_does_not_retry_failed_before_cooldown(db_session):
+    """Failed episodes within the cooldown window should stay as failed."""
+    store = Store(db_session)
+    sub = Subscription(
+        title_romaji="Cooling Anime",
+        status="ongoing",
+    )
+    await store.subscriptions.create(sub)
+
+    now = datetime.now(UTC)
+    ep = Episode(
+        subscription_id=sub.id,
+        episode_number=1,
+        status="failed",
+        updated_at=now - timedelta(seconds=30),
+    )
+    await store.episodes.create(ep)
+
+    schedule = TaskSchedule(
+        subscription_id=sub.id,
+        next_run_at=now - timedelta(minutes=5),
+    )
+    await store.schedules.create(schedule)
+
+    executor = AsyncMock()
+    scheduler = Scheduler(
+        session_factory=MagicMock(),
+        health_check=HealthCheck(tools=[]),
+        planner=EpisodePlanner(),
+        executor=executor,
+    )
+
+    await scheduler.tick(session=db_session)
+
+    executor.assert_not_awaited()

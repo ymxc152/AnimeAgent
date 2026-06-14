@@ -58,9 +58,11 @@ class TestSearchResourcesNode:
 
     async def test_search_merges_with_existing(self):
         """Should merge new candidates with existing ones."""
-        state = _state(torrent_candidates=[
-            {"info_hash": "abc1", "title": "old", "source": "rss"},
-        ])
+        state = _state(
+            torrent_candidates=[
+                {"info_hash": "abc1", "title": "old", "source": "rss"},
+            ]
+        )
 
         mock_tool = AsyncMock()
         mock_tool.invoke.return_value = ToolOutput(
@@ -81,26 +83,26 @@ class TestSearchResourcesNode:
         assert hashes == {"abc1", "abc2"}
 
     async def test_search_uses_chinese_title(self):
-        """Should use Chinese title as search keyword."""
+        """Should use Chinese title as search keyword (romaji is tried first now)."""
         mock_tool = AsyncMock()
         mock_tool.invoke.return_value = ToolOutput(success=True, data={"candidates": []})
 
         node = SearchResourcesNode(anime_garden_tool=mock_tool, llm_tool=_mock_llm("search"))
         await node(_state())
 
-        call_args = mock_tool.invoke.call_args[0][0]
-        assert call_args.search == "葬送的芙莉莲"
+        first_call = mock_tool.invoke.call_args_list[0][0][0]
+        assert first_call.search == "Sousou no Frieren"
 
     async def test_search_falls_back_to_romaji(self):
-        """Should fall back to romaji title when no Chinese title."""
+        """Should use romaji title when Chinese title is missing."""
         mock_tool = AsyncMock()
         mock_tool.invoke.return_value = ToolOutput(success=True, data={"candidates": []})
 
         node = SearchResourcesNode(anime_garden_tool=mock_tool, llm_tool=_mock_llm("search"))
         await node(_state(title_chinese=None))
 
-        call_args = mock_tool.invoke.call_args[0][0]
-        assert call_args.search == "Sousou no Frieren"
+        first_call = mock_tool.invoke.call_args_list[0][0][0]
+        assert first_call.search == "Sousou no Frieren"
 
     async def test_search_returns_failed_on_tool_error(self):
         """Should return failed status when tool fails."""
@@ -114,9 +116,11 @@ class TestSearchResourcesNode:
 
     async def test_search_preserves_existing_on_failure(self):
         """Should preserve existing candidates on tool failure."""
-        state = _state(torrent_candidates=[
-            {"info_hash": "abc1", "title": "existing", "source": "rss"},
-        ])
+        state = _state(
+            torrent_candidates=[
+                {"info_hash": "abc1", "title": "existing", "source": "rss"},
+            ]
+        )
 
         mock_tool = AsyncMock()
         mock_tool.invoke.return_value = ToolOutput(success=False, error="API down")
@@ -142,6 +146,27 @@ class TestSearchResourcesNode:
         assert result["status"] == "searched"
         assert result["resource_searched"] is True
         mock_tool.invoke.assert_not_awaited()
+
+    async def test_search_falls_back_to_episode_query(self):
+        """Should try title + episode number when the raw title yields nothing."""
+        mock_tool = AsyncMock()
+        mock_tool.invoke.side_effect = [
+            ToolOutput(success=True, data={"candidates": []}),
+            ToolOutput(
+                success=True,
+                data={"candidates": [{"info_hash": "ep1", "title": "Frieren 01", "source": "animes_garden"}]},
+            ),
+        ]
+
+        node = SearchResourcesNode(anime_garden_tool=mock_tool, llm_tool=_mock_llm("search"))
+        result = await node(_state())
+
+        assert result["status"] == "searched"
+        assert len(result["torrent_candidates"]) == 1
+        assert result["torrent_candidates"][0]["info_hash"] == "ep1"
+        assert mock_tool.invoke.await_count == 2
+        second_call = mock_tool.invoke.call_args_list[1][0][0]
+        assert "01" in second_call.search
 
     async def test_search_fetches_multiple_pages(self):
         """Should fetch multiple pages when configured."""
