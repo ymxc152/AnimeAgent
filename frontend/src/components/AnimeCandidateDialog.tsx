@@ -68,10 +68,15 @@ export function AnimeCandidateDialog({
                   .join(' / ')}
               </p>
               <div className="mt-2 flex flex-wrap gap-2 text-xs text-slate-400 dark:text-slate-500">
+                {candidate.format && <span>{candidate.format}</span>}
+                {candidate.total_episodes ? (
+                  <span>{candidate.total_episodes} {t.subscriptions.episodesUnit || '集'}</span>
+                ) : (
+                  <span>{t.subscriptions.unknownEpisodes || '集数未知'}</span>
+                )}
                 {candidate.bangumi_id && <span>Bangumi: {candidate.bangumi_id}</span>}
                 {candidate.anilist_id && <span>AniList: {candidate.anilist_id}</span>}
                 {candidate.tmdb_id && <span>TMDB: {candidate.tmdb_id}</span>}
-                {candidate.total_episodes && <span>{candidate.total_episodes} eps</span>}
               </div>
             </button>
           ))}

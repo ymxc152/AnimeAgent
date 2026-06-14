@@ -63,7 +63,7 @@ class BangumiTool(BaseTool):
     async def _search(self, query: str) -> ToolOutput:
         url = f"{BANGUMI_API_BASE}/search/subject/{quote(query)}"
         try:
-            response = await self.client.get(url, params={"type": 2, "responseGroup": "small"})
+            response = await self.client.get(url, params={"type": 2, "responseGroup": "large"})
             response.raise_for_status()
         except httpx.HTTPError as exc:
             return ToolOutput(success=False, error=f"Bangumi search failed: {exc}")
@@ -155,7 +155,7 @@ def _normalize_subject(item: dict[str, Any]) -> dict[str, Any]:
             tags.append(tag)
 
     eps = item.get("eps")
-    total_episodes = int(eps) if eps is not None else None
+    total_episodes = int(eps) if eps else None
 
     # Map Bangumi platform/type hints to a generic format for filtering.
     # Bangumi does not expose a direct "format" field like AniList, so we
