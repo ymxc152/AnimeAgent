@@ -76,3 +76,63 @@ async def test_schedule_resume_preserves_existing_resume_after_for_downloading(b
     result = await node(base_state)
 
     assert result["resume_after"] == existing
+
+
+async def test_schedule_resume_uses_adaptive_interval_for_downloading_without_existing(base_state):
+    """Downloading without existing resume_after should use health-based interval."""
+    node = ScheduleResumeNode(
+        interval_seconds=60,
+        rss_wait_seconds=3600,
+        llm_tool=_mock_llm("schedule", interval=60),
+    )
+    base_state["status"] = "downloading"
+    base_state["_poll_context"] = {
+        "health_eval": {"state": "metadata_downloading"},
+    }
+
+    result = await node(base_state)
+
+    resume_after = datetime.fromisoformat(result["resume_after"])
+    expected_min = datetime.now(UTC) + timedelta(seconds=110)
+    expected_max = datetime.now(UTC) + timedelta(seconds=130)
+    assert expected_min <= resume_after <= expected_max
+
+
+async def test_schedule_resume_uses_stalled_interval_for_stalled_torrent(base_state):
+    """Stalled torrent should use the shorter stalled interval."""
+    node = ScheduleResumeNode(
+        interval_seconds=60,
+        rss_wait_seconds=3600,
+        llm_tool=_mock_llm("schedule", interval=60),
+    )
+    base_state["status"] = "downloading"
+    base_state["_poll_context"] = {
+        "health_eval": {"state": "stalled"},
+    }
+
+    result = await node(base_state)
+
+    resume_after = datetime.fromisoformat(result["resume_after"])
+    expected_min = datetime.now(UTC) + timedelta(seconds=290)
+    expected_max = datetime.now(UTC) + timedelta(seconds=310)
+    assert expected_min <= resume_after <= expected_max
+
+
+async def test_schedule_resume_uses_healthy_interval_for_healthy_torrent(base_state):
+    """Healthy torrent should use the longer healthy interval."""
+    node = ScheduleResumeNode(
+        interval_seconds=60,
+        rss_wait_seconds=3600,
+        llm_tool=_mock_llm("schedule", interval=60),
+    )
+    base_state["status"] = "downloading"
+    base_state["_poll_context"] = {
+        "health_eval": {"state": "healthy"},
+    }
+
+    result = await node(base_state)
+
+    resume_after = datetime.fromisoformat(result["resume_after"])
+    expected_min = datetime.now(UTC) + timedelta(seconds=1790)
+    expected_max = datetime.now(UTC) + timedelta(seconds=1810)
+    assert expected_min <= resume_after <= expected_max

@@ -254,3 +254,75 @@ async def test_poll_download_uses_longer_interval_for_healthy():
     expected_min = datetime.now(UTC) + timedelta(minutes=29)
     expected_max = datetime.now(UTC) + timedelta(minutes=31)
     assert expected_min < resume_after < expected_max
+
+
+async def test_poll_download_enforces_minimum_metadata_interval():
+    """Metadata state should enforce the 2-minute minimum even if LLM asks for less."""
+    qb_tool = AsyncMock()
+    qb_tool.invoke.return_value = ToolOutput(
+        success=True,
+        data={"status": {"progress": 0.0, "state": "metaDL"}},
+    )
+
+    node = PollDownloadNode(qb_tool=qb_tool, llm_tool=_mock_llm("wait", interval=1))
+    result = await node(_state())
+
+    assert result["status"] == "downloading"
+    resume_after = datetime.fromisoformat(result["resume_after"])
+    expected_min = datetime.now(UTC) + timedelta(seconds=110)
+    expected_max = datetime.now(UTC) + timedelta(seconds=130)
+    assert expected_min < resume_after < expected_max
+
+
+async def test_poll_download_enforces_minimum_stalled_interval():
+    """Stalled state should enforce the 5-minute minimum even if LLM asks for less."""
+    now = datetime.now(UTC)
+    qb_tool = AsyncMock()
+    qb_tool.invoke.return_value = ToolOutput(
+        success=True,
+        data={
+            "status": {
+                "progress": 0.3,
+                "state": "stalledDL",
+                "download_speed": 0,
+                "added_at": now - timedelta(hours=2),
+                "last_speed_at": now - timedelta(hours=2),
+            }
+        },
+    )
+
+    node = PollDownloadNode(qb_tool=qb_tool, llm_tool=_mock_llm("wait", interval=1))
+    result = await node(_state())
+
+    assert result["status"] == "downloading"
+    resume_after = datetime.fromisoformat(result["resume_after"])
+    expected_min = datetime.now(UTC) + timedelta(seconds=290)
+    expected_max = datetime.now(UTC) + timedelta(seconds=310)
+    assert expected_min < resume_after < expected_max
+
+
+async def test_poll_download_uses_healthy_interval_when_llm_requests_shorter():
+    """Healthy state should enforce the 30-minute minimum if LLM asks for less."""
+    now = datetime.now(UTC)
+    qb_tool = AsyncMock()
+    qb_tool.invoke.return_value = ToolOutput(
+        success=True,
+        data={
+            "status": {
+                "progress": 0.5,
+                "state": "downloading",
+                "download_speed": 1024000,
+                "added_at": now - timedelta(minutes=10),
+                "last_speed_at": now - timedelta(minutes=5),
+            }
+        },
+    )
+
+    node = PollDownloadNode(qb_tool=qb_tool, llm_tool=_mock_llm("wait", interval=60))
+    result = await node(_state())
+
+    assert result["status"] == "downloading"
+    resume_after = datetime.fromisoformat(result["resume_after"])
+    expected_min = datetime.now(UTC) + timedelta(minutes=29)
+    expected_max = datetime.now(UTC) + timedelta(minutes=31)
+    assert expected_min < resume_after < expected_max

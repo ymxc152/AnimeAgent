@@ -71,6 +71,11 @@ class Settings(BaseSettings):
     log_level: str = "INFO"
     database_url: str = "sqlite+aiosqlite:///anime_agent.db"
 
+    # Adaptive torrent polling intervals
+    torrent_poll_interval_seconds: int = 30 * 60  # 30 minutes for healthy downloads
+    torrent_stalled_interval_seconds: int = 5 * 60  # 5 minutes for stalled / slow torrents
+    torrent_metadata_interval_seconds: int = 2 * 60  # 2 minutes for metadata downloads
+
     # Filters
     filter_exclude_ova: bool = True
     filter_exclude_movies: bool = False

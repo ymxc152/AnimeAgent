@@ -49,14 +49,28 @@ class ScheduleResumeNode(BaseAgentNode):
         prior_status = state.get("status", "")
         existing_resume_after = state.get("resume_after")
 
-        # Preserve adaptive resume_after for active downloads
+        # Preserve adaptive resume_after for active downloads when present.
         if existing_resume_after and prior_status == "downloading":
             return {"resume_after": existing_resume_after}
 
         interval = action.params.get("interval", self.interval_seconds)
+
+        # Adaptive polling for active torrent downloads.
+        if prior_status in ("downloading", "matched"):
+            interval = max(interval, self._adaptive_download_interval(state))
+
         if prior_status in ("waiting_for_rss", "no_match"):
             interval = max(interval, self.rss_wait_seconds)
 
         resume_after = (datetime.now(UTC) + timedelta(seconds=interval)).isoformat()
         return {"resume_after": resume_after}
+
+    def _adaptive_download_interval(self, state: dict[str, Any]) -> int:
+        """Return the minimum interval for a torrent based on its health state."""
+        health_state = state.get("_poll_context", {}).get("health_eval", {}).get("state", "healthy")
+        if health_state == "metadata_downloading":
+            return settings.torrent_metadata_interval_seconds
+        if health_state in ("stalled", "slow"):
+            return settings.torrent_stalled_interval_seconds
+        return settings.torrent_poll_interval_seconds
 

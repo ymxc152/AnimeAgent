@@ -32,12 +32,9 @@ def test_checker_not_completed_with_pending_episodes():
     assert result.all_episodes_completed is False
 
 
-def test_checker_detects_finished_status():
-    """CompletionChecker should mark completed when status is FINISHED and all episodes aired."""
-    subscription = Subscription(
-        total_episodes=2,
-        status="ongoing",
-    )
+def test_checker_marks_completed_when_finished_and_all_done():
+    """CompletionChecker should mark completed when status is FINISHED and all episodes done."""
+    subscription = Subscription(total_episodes=2, status="ongoing")
     episodes = _episodes("completed", "completed")
 
     result = CompletionChecker().check(
@@ -45,10 +42,24 @@ def test_checker_detects_finished_status():
     )
 
     assert result.is_completed is True
+    assert result.all_episodes_completed is True
 
 
-def test_checker_detects_last_episode_aired():
-    """CompletionChecker should mark completed when nextAiringEpisode is absent and enough time passed."""
+def test_checker_not_completed_when_finished_but_incomplete():
+    """CompletionChecker should not mark completed when status is FINISHED but episodes missing."""
+    subscription = Subscription(total_episodes=2, status="ongoing")
+    episodes = _episodes("completed", "pending")
+
+    result = CompletionChecker().check(
+        subscription, episodes, external_status="FINISHED"
+    )
+
+    assert result.is_completed is False
+    assert result.all_episodes_completed is False
+
+
+def test_checker_marks_completed_when_all_done_even_while_releasing():
+    """CompletionChecker should mark completed when all episodes done regardless of airing status."""
     subscription = Subscription(total_episodes=1)
     episodes = _episodes("completed")
 
@@ -60,6 +71,7 @@ def test_checker_detects_last_episode_aired():
     )
 
     assert result.is_completed is True
+    assert result.all_episodes_completed is True
 
 
 def test_checker_waits_when_still_releasing():

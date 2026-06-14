@@ -150,7 +150,7 @@ class PollDownloadNode(BaseAgentNode):
             }
 
         if action.type == "wait":
-            interval = action.params.get("interval", 600)
+            interval = self._resolve_wait_interval(action.params, poll_ctx)
             resume_after = (datetime.now(UTC) + timedelta(seconds=interval)).isoformat()
             return {
                 "status": "downloading",
@@ -171,14 +171,32 @@ class PollDownloadNode(BaseAgentNode):
                 "torrent_hash": None,
             }
 
-        # Default: wait with standard interval
-        interval = settings.check_interval_seconds or 600
+        # Default: wait with adaptive interval
+        interval = self._resolve_wait_interval({}, poll_ctx)
         resume_after = (datetime.now(UTC) + timedelta(seconds=interval)).isoformat()
         return {
             "status": "downloading",
             "download_progress": qb_status.get("progress", 0.0),
             "resume_after": resume_after,
         }
+
+    def _resolve_wait_interval(
+        self, params: dict[str, Any], poll_ctx: dict[str, Any]
+    ) -> int:
+        """Return the minimum acceptable wait interval based on torrent health."""
+        requested = params.get("interval")
+        health_state = poll_ctx.get("health_eval", {}).get("state", "healthy")
+
+        if health_state == "metadata_downloading":
+            base = settings.torrent_metadata_interval_seconds
+        elif health_state in ("stalled", "slow"):
+            base = settings.torrent_stalled_interval_seconds
+        else:
+            base = settings.torrent_poll_interval_seconds
+
+        if requested is None:
+            return base
+        return max(int(requested), base)
 
     def _map_remote_path(self, path: str | None) -> str | None:
         if not path:

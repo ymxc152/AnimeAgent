@@ -1,7 +1,7 @@
 """Completion detection for subscriptions and episode sets."""
 
 from dataclasses import dataclass
-from datetime import UTC, datetime
+from datetime import datetime
 from typing import cast
 
 from anime_agent.memory.models import Episode, Subscription
@@ -49,18 +49,9 @@ class CompletionChecker:
                 reason="Finished airing but not all episodes downloaded",
             )
 
-        # Infer finished from last airing date + grace period
-        if (
-            last_airing_at
-            and (datetime.now(UTC) - last_airing_at).days > self.FINISHED_GRACE_DAYS
-            and total is not None
-            and completed_count >= total
-        ):
-            return CompletionResult(
-                is_completed=True,
-                all_episodes_completed=True,
-                reason="Last airing was >14 days ago and all episodes complete",
-            )
+        # NOTE: last_airing_at inference is reserved for future use when we want
+        # to mark a subscription as completed without explicit external status.
+        # Currently, completion requires all episodes to be downloaded.
 
         return CompletionResult(
             is_completed=False,
