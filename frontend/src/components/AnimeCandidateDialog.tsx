@@ -1,82 +1,42 @@
-import { useState } from 'react'
-import { Search } from 'lucide-react'
-import { searchAnime } from '../api/client'
 import type { AnimeLookup } from '../types'
 import { useI18n } from '../i18n/useI18n'
-import { Button, Input, Loading, Modal } from './ui'
+import { Loading, Modal } from './ui'
 
-interface AnimeSearchDialogProps {
+interface AnimeCandidateDialogProps {
   open: boolean
+  title?: string
+  candidates: AnimeLookup[]
+  loading: boolean
+  error: string | null
   onClose: () => void
   onSelect: (candidate: AnimeLookup) => void
 }
 
-export function AnimeSearchDialog({ open, onClose, onSelect }: AnimeSearchDialogProps) {
+export function AnimeCandidateDialog({
+  open,
+  title,
+  candidates,
+  loading,
+  error,
+  onClose,
+  onSelect,
+}: AnimeCandidateDialogProps) {
   const { t } = useI18n()
-  const [query, setQuery] = useState('')
-  const [results, setResults] = useState<AnimeLookup[]>([])
-  const [loading, setLoading] = useState(false)
-  const [error, setError] = useState<string | null>(null)
 
   if (!open) return null
 
-  async function handleSearch() {
-    if (!query.trim()) return
-    setLoading(true)
-    setError(null)
-    setResults([])
-    try {
-      const { candidates } = await searchAnime(query.trim())
-      setResults(candidates)
-      if (candidates.length === 0) {
-        setError(t.subscriptions.noResults)
-      }
-    } catch (err) {
-      setError(err instanceof Error ? err.message : t.common.error)
-    } finally {
-      setLoading(false)
-    }
-  }
-
   function handleSelect(candidate: AnimeLookup) {
     onSelect(candidate)
-    setQuery('')
-    setResults([])
-    setError(null)
     onClose()
   }
 
   return (
     <Modal
-      title={t.subscriptions.searchByTitle}
+      title={title || t.subscriptions.selectCandidateTitle}
       onClose={onClose}
       size="lg"
     >
       <div className="space-y-4">
-        <div className="flex items-end gap-2">
-          <Input
-            placeholder={t.subscriptions.titlePlaceholder}
-            value={query}
-            onChange={(e) => setQuery(e.target.value)}
-            onKeyDown={(e) => {
-              if (e.key === 'Enter') {
-                e.preventDefault()
-                void handleSearch()
-              }
-            }}
-            className="flex-1"
-          />
-          <Button
-            variant="primary"
-            onClick={() => void handleSearch()}
-            isLoading={loading}
-            disabled={!query.trim()}
-          >
-            <Search className="h-4 w-4" />
-            {t.common.search}
-          </Button>
-        </div>
-
         {error && (
           <div className="rounded-xl border border-rose-200 bg-rose-50 px-4 py-3 text-sm text-rose-600 dark:border-rose-800 dark:bg-rose-950/30 dark:text-rose-400">
             {error}
@@ -85,10 +45,16 @@ export function AnimeSearchDialog({ open, onClose, onSelect }: AnimeSearchDialog
 
         {loading && <Loading message={t.common.loading} />}
 
+        {!loading && candidates.length === 0 && !error && (
+          <div className="rounded-xl border border-slate-100 bg-slate-50/50 px-4 py-8 text-center text-sm text-slate-500 dark:border-slate-800 dark:bg-slate-800/30 dark:text-slate-400">
+            {t.subscriptions.noResults}
+          </div>
+        )}
+
         <div className="max-h-[50vh] space-y-2 overflow-y-auto">
-          {results.map((candidate, index) => (
+          {candidates.map((candidate, index) => (
             <button
-              key={`${candidate.bangumi_id ?? candidate.anilist_id ?? index}`}
+              key={`${candidate.bangumi_id ?? candidate.anilist_id ?? candidate.tmdb_id ?? index}`}
               type="button"
               onClick={() => handleSelect(candidate)}
               className="w-full rounded-xl border border-slate-100 bg-slate-50/50 p-4 text-left transition-colors hover:bg-slate-100 dark:border-slate-800 dark:bg-slate-800/30 dark:hover:bg-slate-800"

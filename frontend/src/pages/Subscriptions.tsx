@@ -5,13 +5,14 @@ import {
   listSubscriptions,
   lookupAnime,
   refreshSubscriptionMetadata,
+  searchAnime,
   updateSubscription,
 } from '../api/client'
 import type { AnimeLookup, Subscription, SubscriptionCreateRequest } from '../types'
 import { useI18n } from '../i18n/useI18n'
 import { usePolling } from '../hooks/usePolling'
 import { useToast } from '../hooks/useToast'
-import { AnimeSearchDialog } from '../components/AnimeSearchDialog'
+import { AnimeCandidateDialog } from '../components/AnimeCandidateDialog'
 import { Card, Button, Input, Switch, Badge, Loading, EmptyState, Modal } from '../components/ui'
 import { Plus, Trash2, ListVideo, RefreshCw, Search } from 'lucide-react'
 
@@ -44,8 +45,11 @@ export function Subscriptions() {
   const [showModal, setShowModal] = useState(false)
   const [form, setForm] = useState<SubscriptionCreateRequest>(EMPTY_FORM)
   const [formError, setFormError] = useState<string | null>(null)
-  const [lookingUp, setLookingUp] = useState(false)
-  const [showSearchDialog, setShowSearchDialog] = useState(false)
+  const [searchQuery, setSearchQuery] = useState('')
+  const [showCandidateDialog, setShowCandidateDialog] = useState(false)
+  const [candidates, setCandidates] = useState<AnimeLookup[]>([])
+  const [candidateLoading, setCandidateLoading] = useState(false)
+  const [candidateError, setCandidateError] = useState<string | null>(null)
   const [totalEditable, setTotalEditable] = useState(false)
 
   const load = useCallback(async () => {
@@ -71,6 +75,7 @@ export function Subscriptions() {
     try {
       await createSubscription(form)
       setForm(EMPTY_FORM)
+      setSearchQuery('')
       setShowModal(false)
       setTotalEditable(false)
       await load()
@@ -96,37 +101,67 @@ export function Subscriptions() {
     }
   }
 
-  async function handleLookup() {
-    const bangumiId = form.bangumi_id
-    const anilistId = form.anilist_id
-    const tmdbId = form.tmdb_id
-    if (!bangumiId && !anilistId && !tmdbId) {
-      setFormError('请至少填写一个外部 ID')
+  function candidateKey(candidate: AnimeLookup) {
+    return `${candidate.bangumi_id ?? ''}-${candidate.anilist_id ?? ''}-${candidate.tmdb_id ?? ''}`
+  }
+
+  async function handleSearch() {
+    const query = searchQuery.trim()
+    const idEntries: { source: 'bangumi' | 'anilist' | 'tmdb'; id: number }[] = [
+      { source: 'bangumi', id: form.bangumi_id },
+      { source: 'anilist', id: form.anilist_id },
+      { source: 'tmdb', id: form.tmdb_id },
+    ].filter((entry): entry is { source: 'bangumi' | 'anilist' | 'tmdb'; id: number } =>
+      typeof entry.id === 'number' && entry.id > 0
+    )
+
+    if (!query && idEntries.length === 0) {
+      setFormError(t.subscriptions.searchNeedInput || '请输入标题或至少填写一个外部 ID')
       return
     }
-    setLookingUp(true)
+
     setFormError(null)
+    setCandidateLoading(true)
+    setCandidateError(null)
+    setCandidates([])
+    setShowCandidateDialog(true)
+
     try {
-      if (bangumiId) {
-        const anime = await lookupAnime('bangumi', bangumiId)
-        fillFormFromLookup(anime)
-      } else if (anilistId) {
-        const anime = await lookupAnime('anilist', anilistId)
-        fillFormFromLookup(anime)
-      } else if (tmdbId) {
-        const anime = await lookupAnime('tmdb', tmdbId)
-        fillFormFromLookup(anime)
+      if (query) {
+        const { candidates } = await searchAnime(query)
+        setCandidates(candidates)
+        if (candidates.length === 0) {
+          setCandidateError(t.subscriptions.noResults)
+        }
+      } else {
+        const results: AnimeLookup[] = []
+        const errors: string[] = []
+        for (const { source, id } of idEntries) {
+          try {
+            const anime = await lookupAnime(source, id)
+            results.push(anime)
+          } catch (err) {
+            errors.push(err instanceof Error ? err.message : t.common.error)
+          }
+        }
+        const deduped = results.filter(
+          (item, index, arr) => arr.findIndex((c) => candidateKey(c) === candidateKey(item)) === index
+        )
+        setCandidates(deduped)
+        if (deduped.length === 0) {
+          setCandidateError(errors[0] || t.subscriptions.noResults)
+        }
       }
-      showToast(t.subscriptions.lookupSuccess)
     } catch (err) {
-      setFormError(err instanceof Error ? err.message : t.common.error)
+      setCandidateError(err instanceof Error ? err.message : t.common.error)
     } finally {
-      setLookingUp(false)
+      setCandidateLoading(false)
     }
   }
 
-  function handleSearchSelect(candidate: AnimeLookup) {
+  function handleSelect(candidate: AnimeLookup) {
     fillFormFromLookup(candidate)
+    setSearchQuery('')
     showToast(t.subscriptions.lookupSuccess)
   }
 
@@ -166,6 +201,9 @@ export function Subscriptions() {
   }
 
   if (loading) return <Loading message={t.common.loading} />
+
+  const canSearch =
+    searchQuery.trim().length > 0 || Boolean(form.bangumi_id) || Boolean(form.anilist_id) || Boolean(form.tmdb_id)
 
   return (
     <div className="space-y-8">
@@ -307,30 +345,51 @@ export function Subscriptions() {
               </div>
             )}
 
-            <div className="rounded-xl border border-slate-100 bg-slate-50/50 p-3 dark:border-slate-800 dark:bg-slate-800/30">
-              <p className="mb-2 text-xs font-medium text-slate-500 dark:text-slate-400">
-                {t.subscriptions.searchById}
+            <div className="space-y-3 rounded-xl border border-slate-100 bg-slate-50/50 p-4 dark:border-slate-800 dark:bg-slate-800/30">
+              <p className="text-xs font-medium text-slate-500 dark:text-slate-400">
+                {t.subscriptions.searchByTitleOrId || '通过标题或外部 ID 搜索'}
               </p>
               <Input
-                type="number"
-                placeholder="Bangumi ID"
-                value={form.bangumi_id ?? ''}
-                onChange={(e) => setForm({ ...form, bangumi_id: e.target.value ? Number(e.target.value) : null })}
+                placeholder={t.subscriptions.titlePlaceholder}
+                value={searchQuery}
+                onChange={(e) => setSearchQuery(e.target.value)}
+                onKeyDown={(e) => {
+                  if (e.key === 'Enter') {
+                    e.preventDefault()
+                    void handleSearch()
+                  }
+                }}
               />
-              <Input
-                type="number"
-                placeholder="AniList ID"
-                value={form.anilist_id ?? ''}
-                onChange={(e) => setForm({ ...form, anilist_id: e.target.value ? Number(e.target.value) : null })}
-                className="mt-2"
-              />
-              <Input
-                type="number"
-                placeholder={t.subscriptions.tmdbId}
-                value={form.tmdb_id ?? ''}
-                onChange={(e) => setForm({ ...form, tmdb_id: e.target.value ? Number(e.target.value) : null })}
-                className="mt-2"
-              />
+              <div className="grid grid-cols-1 gap-2 sm:grid-cols-3">
+                <Input
+                  type="number"
+                  placeholder="Bangumi ID"
+                  value={form.bangumi_id ?? ''}
+                  onChange={(e) => setForm({ ...form, bangumi_id: e.target.value ? Number(e.target.value) : null })}
+                />
+                <Input
+                  type="number"
+                  placeholder="AniList ID"
+                  value={form.anilist_id ?? ''}
+                  onChange={(e) => setForm({ ...form, anilist_id: e.target.value ? Number(e.target.value) : null })}
+                />
+                <Input
+                  type="number"
+                  placeholder={t.subscriptions.tmdbId}
+                  value={form.tmdb_id ?? ''}
+                  onChange={(e) => setForm({ ...form, tmdb_id: e.target.value ? Number(e.target.value) : null })}
+                />
+              </div>
+              <Button
+                type="button"
+                variant="primary"
+                onClick={() => void handleSearch()}
+                isLoading={candidateLoading}
+                disabled={!canSearch}
+              >
+                <Search className="h-4 w-4" />
+                {t.common.search}
+              </Button>
             </div>
 
             <Input
@@ -369,33 +428,27 @@ export function Subscriptions() {
               </Button>
             </div>
 
-            <div className="flex flex-col gap-2 sm:flex-row">
-              <Button
-                type="button"
-                variant="secondary"
-                onClick={() => void handleLookup()}
-                isLoading={lookingUp}
-                disabled={!form.bangumi_id && !form.anilist_id && !form.tmdb_id}
-              >
-                {t.subscriptions.lookup}
-              </Button>
-              <Button
-                type="button"
-                variant="primary"
-                onClick={() => setShowSearchDialog(true)}
-              >
-                <Search className="h-4 w-4" />
-                {t.subscriptions.searchByTitle}
-              </Button>
+            <div className="flex items-center justify-between rounded-xl border border-slate-100 bg-slate-50/50 p-3 dark:border-slate-800 dark:bg-slate-800/30">
+              <span className="text-sm text-slate-700 dark:text-slate-300">
+                {t.subscriptions.form.autoDownload}
+              </span>
+              <Switch
+                checked={form.auto_download_enabled ?? true}
+                onChange={(checked) => setForm({ ...form, auto_download_enabled: checked })}
+              />
             </div>
           </form>
         </Modal>
       )}
 
-      <AnimeSearchDialog
-        open={showSearchDialog}
-        onClose={() => setShowSearchDialog(false)}
-        onSelect={handleSearchSelect}
+      <AnimeCandidateDialog
+        open={showCandidateDialog}
+        title={t.subscriptions.selectCandidateTitle}
+        candidates={candidates}
+        loading={candidateLoading}
+        error={candidateError}
+        onClose={() => setShowCandidateDialog(false)}
+        onSelect={handleSelect}
       />
     </div>
   )
