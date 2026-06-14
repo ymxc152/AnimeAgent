@@ -255,6 +255,7 @@ export function Subscriptions() {
         <Modal
           title={t.subscriptions.addSubscription}
           onClose={() => setShowModal(false)}
+          size="lg"
           footer={
             <>
               <Button variant="secondary" onClick={() => setShowModal(false)}>

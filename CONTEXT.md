@@ -28,6 +28,18 @@ _Avoid_: 默认把新增/刷新做成 FAB
 页面主内容容器不再需要为底部悬浮按钮预留额外 padding；移除 FAB 后，列表最后一项不会被遮挡。
 _Avoid_: 底部内边距补偿、FAB 占位
 
+**模态弹窗 / Modal Dialog**
+在当前页内打开的覆盖层窗口，必须阻断背景交互：背景禁止滚动、点击 overlay 可关闭、按 ESC 可关闭。弹窗内容按用途选择尺寸 preset（sm/md/lg/xl），并通过 Portal 挂载到 body，避免被父级样式影响定位。
+_Avoid_: 弹出层、Dialog、新窗口
+
+**弹窗尺寸 Preset (Modal Size Preset)**
+Modal 的宽度等级，按内容类型选择：sm（确认提示）、md（短表单，如 RSS 源）、lg（中等表单，如新增订阅）、xl（复杂内容，如规则管理、剧集详情）。
+_Avoid_: 所有弹窗都用同一个尺寸
+
+**背景锁定 (Backdrop Lock)**
+Modal 打开时禁止底层页面滚动，并将交互限制在弹窗内；关闭后恢复滚动。
+_Avoid_: 背景还能滚动、底层可点击
+
 ## Example dialogue
 
 > Dev: “Discovery 页面有两个 FAB，左下角刷新、右下角新增规则，会挡住最后一行内容。我想把刷新放到顶部导航栏，新增规则放到页面标题行。”

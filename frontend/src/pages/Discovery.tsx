@@ -454,7 +454,7 @@ export function Discovery() {
         <Modal
           title={t.discovery.autoSubscribeRules}
           onClose={() => setShowRules(false)}
-          size="lg"
+          size="xl"
           footer={
             editingRule === null ? (
               <Button variant="primary" onClick={() => { setEditingRule(null); setRuleForm(EMPTY_RULE) }}>

@@ -322,7 +322,7 @@ export function Episodes() {
               : t.episodes.title
           }
           onClose={() => setDetailId(null)}
-          size="lg"
+          size="xl"
         >
           {detailLoading || !detail ? (
             <Loading message={t.common.loading} />
