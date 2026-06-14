@@ -1,9 +1,11 @@
 import { useCallback, useEffect, useRef, useState } from 'react'
 import { MessageCircle, Send, Plus, Trash2 } from 'lucide-react'
-import { sendChatMessage, clearChatHistory } from '../api/client'
+import { sendChatMessage, getChatHistory, clearChatHistory } from '../api/client'
 import { useI18n } from '../i18n/useI18n'
 import { Badge, Button, Card, EmptyState } from '../components/ui'
 import type { ChatMessage } from '../types'
+
+const STORAGE_KEY = 'animeagent_chat_session_id'
 
 const INTENT_VARIANT: Record<string, 'primary' | 'success' | 'warning' | 'info' | 'default'> = {
   query_status: 'info',
@@ -18,10 +20,42 @@ export function Chat() {
   const [messages, setMessages] = useState<ChatMessage[]>([])
   const [input, setInput] = useState('')
   const [loading, setLoading] = useState(false)
-  const [sessionId, setSessionId] = useState<string | null>(null)
+  const [sessionId, setSessionId] = useState<string | null>(
+    () => localStorage.getItem(STORAGE_KEY)
+  )
   const [error, setError] = useState<string | null>(null)
   const bottomRef = useRef<HTMLDivElement>(null)
   const inputRef = useRef<HTMLInputElement>(null)
+
+  // Persist sessionId to localStorage
+  useEffect(() => {
+    if (sessionId) {
+      localStorage.setItem(STORAGE_KEY, sessionId)
+    } else {
+      localStorage.removeItem(STORAGE_KEY)
+    }
+  }, [sessionId])
+
+  // Load history on mount when sessionId exists
+  useEffect(() => {
+    if (!sessionId) return
+    let cancelled = false
+    ;(async () => {
+      try {
+        const history = await getChatHistory(sessionId)
+        if (!cancelled && history.messages.length > 0) {
+          setMessages(history.messages)
+        }
+      } catch {
+        // Session may have been cleared on the server — clear local too
+        if (!cancelled) {
+          localStorage.removeItem(STORAGE_KEY)
+          setSessionId(null)
+        }
+      }
+    })()
+    return () => { cancelled = true }
+  }, []) // eslint-disable-line react-hooks/exhaustive-deps
 
   // Auto-scroll on new messages
   useEffect(() => {
