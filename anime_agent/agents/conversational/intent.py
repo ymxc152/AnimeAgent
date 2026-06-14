@@ -228,4 +228,23 @@ def _extract_title(text: str) -> str | None:
     for suffix in suffixes:
         if text.endswith(suffix):
             return text[: -len(suffix)].strip() or None
+
+    # Strip common prefix keywords (e.g. "订阅 葬送的芙莉莲")
+    prefixes = [
+        "订阅",
+        "追番",
+        "帮我追",
+        "我想看",
+        "想追",
+        "帮我找",
+        "重试",
+        "retry",
+        "再下载",
+    ]
+    for prefix in prefixes:
+        if text.startswith(prefix):
+            rest = text[len(prefix):].strip()
+            if rest:
+                return rest
+
     return None

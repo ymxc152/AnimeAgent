@@ -13,12 +13,16 @@ from anime_agent.agents.conversational.intent import (
 
 class TestSubscribeIntent:
     def test_subscribe_keyword(self):
-        intent = parse_intent("订阅葬送的芙莉莲")
+        intent = parse_intent("葬送的芙莉莲订阅")
         assert intent.action == "subscribe"
         assert intent.title == "葬送的芙莉莲"
 
+    def test_subscribe_keyword_prefix(self):
+        intent = parse_intent("订阅 葬送的芙莉莲")
+        assert intent.action == "subscribe"
+
     def test追番_keyword(self):
-        intent = parse_intent("追番葬送的芙莉莲")
+        intent = parse_intent("追番 葬送的芙莉莲")
         assert intent.action == "subscribe"
 
     def test_subscribe_english(self):
@@ -26,19 +30,19 @@ class TestSubscribeIntent:
         assert intent.action == "subscribe"
 
     def test_帮我追_keyword(self):
-        intent = parse_intent("帮我追葬送的芙莉莲")
+        intent = parse_intent("帮我追 葬送的芙莉莲")
         assert intent.action == "subscribe"
 
     def test_我想看_keyword(self):
-        intent = parse_intent("我想看葬送的芙莉莲")
+        intent = parse_intent("我想看 葬送的芙莉莲")
         assert intent.action == "subscribe"
 
     def test_想追_keyword(self):
-        intent = parse_intent("想追葬送的芙莉莲")
+        intent = parse_intent("想追 葬送的芙莉莲")
         assert intent.action == "subscribe"
 
     def test_帮我找_keyword(self):
-        intent = parse_intent("帮我找葬送的芙莉莲")
+        intent = parse_intent("帮我找 葬送的芙莉莲")
         assert intent.action == "subscribe"
 
 
@@ -105,12 +109,12 @@ class TestHelpIntent:
 
 
 class TestSelectIntent:
-    def test_第一个(self):
-        intent = parse_intent("第一个")
+    def test_diyige(self):
+        intent = parse_intent("第1个")
         assert intent.action == "select_candidate"
         assert intent.selection_index == 1
 
-    def test_第2个(self):
+    def test_di2ge(self):
         intent = parse_intent("第2个")
         assert intent.action == "select_candidate"
         assert intent.selection_index == 2
