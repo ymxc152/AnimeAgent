@@ -13,6 +13,7 @@ export const translations = {
       discovery: '发现',
       rssSources: 'RSS 源',
       logs: '日志',
+      chat: '助手',
     },
     common: {
       loading: '加载中...',
@@ -239,6 +240,22 @@ export const translations = {
       noLogs: '暂无日志',
       refresh: '刷新',
     },
+    chat: {
+      title: '助手',
+      placeholder: '输入消息...',
+      send: '发送',
+      thinking: '思考中...',
+      newChat: '新对话',
+      clearHistory: '清除历史',
+      intentLabels: {
+        query_status: '查询状态',
+        subscribe: '订阅',
+        select_candidate: '确认选择',
+        retry_episode: '重试下载',
+        help: '帮助',
+        unknown: '未识别',
+      },
+    },
     language: {
       title: '语言',
       zh: '中文',
@@ -257,6 +274,7 @@ export const translations = {
       discovery: 'Discovery',
       rssSources: 'RSS Sources',
       logs: 'Logs',
+      chat: 'Assistant',
     },
     common: {
       loading: 'Loading...',
@@ -482,6 +500,22 @@ export const translations = {
       limit: 'Limit',
       noLogs: 'No logs available',
       refresh: 'Refresh',
+    },
+    chat: {
+      title: 'Assistant',
+      placeholder: 'Type a message...',
+      send: 'Send',
+      thinking: 'Thinking...',
+      newChat: 'New Chat',
+      clearHistory: 'Clear History',
+      intentLabels: {
+        query_status: 'Status Query',
+        subscribe: 'Subscribe',
+        select_candidate: 'Confirm',
+        retry_episode: 'Retry Download',
+        help: 'Help',
+        unknown: 'Unknown',
+      },
     },
     language: {
       title: 'Language',

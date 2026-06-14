@@ -1,4 +1,4 @@
-"""Extended tests for ConversationalAgent — all query types."""
+"""Extended tests for ConversationalAgent — session management and all actions."""
 
 from unittest.mock import AsyncMock, MagicMock
 
@@ -19,9 +19,21 @@ def mock_query_service():
 
 
 @pytest.fixture
-def agent(mock_query_service, db_session):
-    a = ConversationalAgent(db_session)
+def mock_store():
+    store = MagicMock()
+    store.chat_messages.create = AsyncMock()
+    store.chat_messages.list_by_session = AsyncMock(return_value=[])
+    return store
+
+
+@pytest.fixture
+def agent(db_session, mock_query_service, mock_store):
+    a = ConversationalAgent.__new__(ConversationalAgent)
+    a.session = db_session
+    a.store = mock_store
     a.query_service = mock_query_service
+    a.llm_tool = None
+    a.resolver = MagicMock()
     return a
 
 
@@ -51,14 +63,47 @@ class TestConversationalAgentChat:
         assert "Frieren" in result["reply"]
         mock_query_service.failed_tasks.assert_called_once()
 
+    async def test_help(self, agent):
+        result = await agent.chat("帮助")
+        assert "追番" in result["reply"] or "订阅" in result["reply"]
+
     async def test_unknown_input(self, agent):
         result = await agent.chat("今天天气怎么样")
         assert "intent" in result
         assert "reply" in result
+        assert result["intent"]["action"] == "unknown"
 
-    async def test_returns_intent_and_data(self, agent):
-        result = await agent.chat("我在追哪些番")
-        assert "intent" in result
-        assert "reply" in result
-        assert "data" in result
-        assert isinstance(result["data"], list)
+    async def test_returns_session_id(self, agent):
+        result = await agent.chat("帮助", session_id="test123")
+        assert result["session_id"] == "test123"
+
+    async def test_generates_session_id(self, agent):
+        result = await agent.chat("帮助")
+        assert "session_id" in result
+        assert len(result["session_id"]) > 0
+
+    async def test_saves_messages(self, agent, mock_store):
+        await agent.chat("帮助")
+        assert mock_store.chat_messages.create.call_count == 2  # user + assistant
+
+
+class TestConversationalAgentLLMFallback:
+    async def test_uses_llm_for_unknown(self, db_session, mock_store):
+        mock_llm = AsyncMock()
+        mock_llm.invoke.return_value = MagicMock(
+            success=True,
+            data={"json": {"action": "query_status", "query_type": "list_active", "title": None}},
+        )
+
+        mock_qs = MagicMock()
+        mock_qs.list_active = AsyncMock(return_value=[{"title": "Test", "total_episodes": 12, "completed": 5, "failed": 0}])
+
+        a = ConversationalAgent.__new__(ConversationalAgent)
+        a.session = db_session
+        a.store = mock_store
+        a.query_service = mock_qs
+        a.llm_tool = mock_llm
+        a.resolver = MagicMock()
+
+        await a.chat("随便问点什么")
+        assert mock_llm.invoke.called

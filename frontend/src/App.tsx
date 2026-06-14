@@ -1,5 +1,6 @@
 import { BrowserRouter, Route, Routes } from 'react-router-dom'
 import { Layout } from './components/Layout'
+import { Chat } from './pages/Chat'
 import { Dashboard } from './pages/Dashboard'
 import { Discovery } from './pages/Discovery'
 import { Episodes } from './pages/Episodes'
@@ -18,6 +19,7 @@ function App() {
           <Route path="discovery" element={<Discovery />} />
           <Route path="rss-sources" element={<RSSSources />} />
           <Route path="logs" element={<Logs />} />
+          <Route path="chat" element={<Chat />} />
         </Route>
       </Routes>
     </BrowserRouter>

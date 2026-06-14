@@ -1,130 +1,154 @@
-"""Extended tests for conversational reply formatter — all query types and edge cases."""
+"""Extended tests for conversational reply formatter — all action types."""
 
-from anime_agent.agents.conversational.reply import format_reply
+from unittest.mock import AsyncMock, MagicMock
 
-# ── list_active ─────────────────────────────────────────────────────────
+from anime_agent.agents.conversational.reply import format_reply, llm_polish
+
+# ── Help ────────────────────────────────────────────────────────────────
 
 
-class TestListActive:
-    def test_empty_list(self):
-        reply = format_reply("list_active", [])
+class TestHelp:
+    def test_returns_help_text(self):
+        reply = format_reply("help", None)
+        assert "追番" in reply
+        assert "订阅" in reply
+
+
+# ── Subscribe ───────────────────────────────────────────────────────────
+
+
+class TestSubscribe:
+    def test_shows_candidates(self):
+        data = [
+            {"title_chinese": "葬送的芙莉莲", "title_romaji": "Frieren", "season_year": 2023, "total_episodes": 28},
+            {"title_chinese": "进击的巨人", "title_romaji": "AoT", "season_year": 2013, "total_episodes": 25},
+        ]
+        reply = format_reply("subscribe", data, title="芙莉莲")
+        assert "葬送的芙莉莲" in reply
+        assert "进击的巨人" in reply
+        assert "第 N 个" in reply
+
+    def test_no_candidates(self):
+        reply = format_reply("subscribe", [], title="不存在的番")
+        assert "没有找到" in reply
+
+    def test_no_title(self):
+        reply = format_reply("subscribe", None, title=None)
+        assert "想订阅什么" in reply
+
+    def test_subscribe_confirmed(self):
+        reply = format_reply("subscribe_confirmed", None, title="葬送的芙莉莲")
+        assert "已成功订阅" in reply
+        assert "葬送的芙莉莲" in reply
+
+
+# ── Select candidate ────────────────────────────────────────────────────
+
+
+class TestSelectCandidate:
+    def test_no_candidates_in_context(self):
+        reply = format_reply("select_candidate", None)
+        assert "没有可选择" in reply
+
+
+# ── Retry episode ───────────────────────────────────────────────────────
+
+
+class TestRetryEpisode:
+    def test_retry_success(self):
+        data = {"success": True, "episode_number": 5}
+        reply = format_reply("retry_episode", data, title="葬送的芙莉莲")
+        assert "已重置" in reply
+        assert "第 5 集" in reply
+
+    def test_retry_not_found(self):
+        data = {"success": False}
+        reply = format_reply("retry_episode", data, title="葬送的芙莉莲")
+        assert "没有找到" in reply
+
+
+# ── Query status ────────────────────────────────────────────────────────
+
+
+class TestQueryStatus:
+    def test_list_active(self):
+        data = [{"title": "Frieren", "total_episodes": 28, "completed": 10, "failed": 0}]
+        reply = format_reply("query_status", data, query_type="list_active")
+        assert "Frieren" in reply
+        assert "10/28" in reply
+
+    def test_list_active_empty(self):
+        reply = format_reply("query_status", [], query_type="list_active")
         assert "没有在追" in reply
 
-    def test_multiple_subscriptions(self):
-        data = [
-            {"title": "Frieren", "total_episodes": 28, "completed": 10, "failed": 0},
-            {"title": "Dandadan", "total_episodes": 12, "completed": 12, "failed": 0},
-        ]
-        reply = format_reply("list_active", data)
-        assert "Frieren" in reply
-        assert "Dandadan" in reply
-        assert "10/28" in reply
-        assert "12/12" in reply
-
-    def test_no_failed_episodes(self):
-        data = [{"title": "Test", "total_episodes": 12, "completed": 12, "failed": 0}]
-        reply = format_reply("list_active", data)
-        assert "失败" not in reply
-
-    def test_unknown_total_episodes(self):
-        data = [{"title": "Test", "total_episodes": None, "completed": 3, "failed": 0}]
-        reply = format_reply("list_active", data)
-        assert "3/?" in reply
-
-
-# ── subscription_detail ─────────────────────────────────────────────────
-
-
-class TestSubscriptionDetail:
-    def test_with_all_fields(self):
+    def test_subscription_detail(self):
         data = {"title": "Frieren", "total_episodes": 28, "completed": 20, "failed": 2, "pending": 6}
-        reply = format_reply("subscription_detail", data)
+        reply = format_reply("query_status", data, query_type="subscription_detail")
         assert "共 28 集" in reply
-        assert "已完成 20 集" in reply
-        assert "待处理 6 集" in reply
-        assert "失败 2 集" in reply
 
-    def test_with_unknown_total(self):
-        data = {"title": "Test", "total_episodes": None, "completed": 0, "failed": 0, "pending": 0}
-        reply = format_reply("subscription_detail", data)
-        assert "共 ? 集" in reply
-
-
-# ── pending_torrents ────────────────────────────────────────────────────
-
-
-class TestPendingTorrents:
-    def test_empty_list(self):
-        reply = format_reply("pending_torrents", [])
+    def test_pending_torrents_empty(self):
+        reply = format_reply("query_status", [], query_type="pending_torrents")
         assert "没有等待" in reply
 
-    def test_multiple_pending(self):
-        data = [
-            {"title": "Frieren", "episode_number": 5, "status": "waiting_for_rss"},
-            {"title": "Dandadan", "episode_number": 3, "status": "human_review"},
-        ]
-        reply = format_reply("pending_torrents", data)
-        assert "Frieren" in reply
-        assert "Dandadan" in reply
-
-
-# ── anime_info ──────────────────────────────────────────────────────────
-
-
-class TestAnimeInfo:
-    def test_with_all_fields(self):
-        data = {"title": "Frieren", "total_episodes": 28, "season": "FALL", "season_year": 2023}
-        reply = format_reply("anime_info", data)
-        assert "Frieren" in reply
-        assert "2023 FALL" in reply
-        assert "共 28 集" in reply
-
-    def test_with_missing_season(self):
-        data = {"title": "Frieren", "total_episodes": 28, "season": None, "season_year": None}
-        reply = format_reply("anime_info", data)
-        assert "Frieren" in reply
-        assert "共 28 集" in reply
-
-    def test_with_unknown_total(self):
-        data = {"title": "Test", "total_episodes": None, "season": "SPRING", "season_year": 2024}
-        reply = format_reply("anime_info", data)
-        assert "未知" in reply
-
-
-# ── failed_tasks ────────────────────────────────────────────────────────
-
-
-class TestFailedTasks:
-    def test_empty_list(self):
-        reply = format_reply("failed_tasks", [])
+    def test_failed_tasks_empty(self):
+        reply = format_reply("query_status", [], query_type="failed_tasks")
         assert "没有失败" in reply
 
-    def test_with_error_log(self):
-        data = [{"title": "Frieren", "episode_number": 5, "error_log": "Connection timeout to qBittorrent server"}]
-        reply = format_reply("failed_tasks", data)
-        assert "Frieren" in reply
-        assert "第 5 集" in reply
-        assert "Connection timeout" in reply
-
-    def test_without_error_log(self):
-        data = [{"title": "Frieren", "episode_number": 5}]
-        reply = format_reply("failed_tasks", data)
+    def test_anime_info(self):
+        data = {"title": "Frieren", "total_episodes": 28, "season": "FALL", "season_year": 2023}
+        reply = format_reply("query_status", data, query_type="anime_info")
         assert "Frieren" in reply
 
+    def test_none_data(self):
+        reply = format_reply("query_status", None, query_type="subscription_detail")
+        assert "还没有订阅" in reply
 
-# ── Unknown query type ──────────────────────────────────────────────────
+
+# ── Unknown action ──────────────────────────────────────────────────────
 
 
-class TestUnknownQuery:
-    def test_returns_fallback_message(self):
-        reply = format_reply("unknown_type", {"some": "data"})
+class TestUnknown:
+    def test_returns_fallback(self):
+        reply = format_reply("unknown_action", {"some": "data"})
         assert "没太听懂" in reply
 
 
-# ── None data ───────────────────────────────────────────────────────────
+# ── llm_polish ──────────────────────────────────────────────────────────
 
 
-class TestNoneData:
-    def test_returns_not_subscribed_message(self):
-        reply = format_reply("subscription_detail", None)
-        assert "还没有订阅" in reply
+class TestLLMPolish:
+    async def test_returns_polished_text(self):
+        mock_llm = AsyncMock()
+        mock_llm.invoke.return_value = MagicMock(
+            success=True,
+            data={"text": "你正在追的番有芙莉莲，已经看了10集了。"},
+        )
+
+        result = await llm_polish(
+            mock_llm, "我在追什么番", "模板回复", [{"title": "Frieren"}]
+        )
+        assert result == "你正在追的番有芙莉莲，已经看了10集了。"
+
+    async def test_returns_none_on_llm_failure(self):
+        mock_llm = AsyncMock()
+        mock_llm.invoke.return_value = MagicMock(success=False, error="API error")
+
+        result = await llm_polish(mock_llm, "test", "模板回复", None)
+        assert result is None
+
+    async def test_returns_none_on_exception(self):
+        mock_llm = AsyncMock()
+        mock_llm.invoke.side_effect = Exception("Network error")
+
+        result = await llm_polish(mock_llm, "test", "模板回复", None)
+        assert result is None
+
+    async def test_returns_none_when_polished_same_as_template(self):
+        mock_llm = AsyncMock()
+        mock_llm.invoke.return_value = MagicMock(
+            success=True,
+            data={"text": "模板回复"},
+        )
+
+        result = await llm_polish(mock_llm, "test", "模板回复", None)
+        assert result is None

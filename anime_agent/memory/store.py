@@ -9,6 +9,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 
 from anime_agent.memory.models import (
     AutoSubscribeRule,
+    ChatMessage,
     Episode,
     ErrorLog,
     RSSSource,
@@ -256,6 +257,52 @@ class AutoSubscribeRuleStore:
         await self.session.commit()
 
 
+class ChatMessageStore:
+    """Data access for ChatMessage (conversation history)."""
+
+    def __init__(self, session: AsyncSession):
+        self.session = session
+
+    async def create(
+        self,
+        session_id: str,
+        role: str,
+        content: str,
+        intent_json: str | None = None,
+        data_json: str | None = None,
+    ) -> ChatMessage:
+        msg = ChatMessage(
+            session_id=session_id,
+            role=role,
+            content=content,
+            intent_json=intent_json,
+            data_json=data_json,
+        )
+        self.session.add(msg)
+        await self.session.commit()
+        await self.session.refresh(msg)
+        return msg
+
+    async def list_by_session(
+        self, session_id: str, limit: int = 20
+    ) -> list[ChatMessage]:
+        result = await self.session.execute(
+            select(ChatMessage)
+            .where(ChatMessage.session_id == session_id)
+            .order_by(ChatMessage.created_at.asc())
+            .limit(limit)
+        )
+        return list(result.scalars().all())
+
+    async def delete_session(self, session_id: str) -> None:
+        result = await self.session.execute(
+            select(ChatMessage).where(ChatMessage.session_id == session_id)
+        )
+        for msg in result.scalars().all():
+            await self.session.delete(msg)
+        await self.session.commit()
+
+
 class ErrorLogStore:
     """Data access for error_logs table."""
 
@@ -306,6 +353,7 @@ class Store:
         self.user_requests = UserRequestStore(session)
         self.rss_sources = RSSSourceStore(session)
         self.auto_subscribe_rules = AutoSubscribeRuleStore(session)
+        self.chat_messages = ChatMessageStore(session)
         self.error_logs = ErrorLogStore(session)
 
     async def __aenter__(self) -> "Store":

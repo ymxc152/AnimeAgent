@@ -222,6 +222,7 @@ class ChatRequest(BaseModel):
     """Natural-language message to the conversational agent."""
 
     message: str
+    session_id: str | None = None
 
 
 class ChatResponse(BaseModel):
@@ -230,3 +231,20 @@ class ChatResponse(BaseModel):
     reply: str
     intent: dict[str, Any]
     data: Any | None = None
+    session_id: str
+
+
+class ChatMessageResponse(BaseModel):
+    """A single chat message in history."""
+
+    role: str
+    content: str
+    intent: dict[str, Any] | None = None
+    created_at: datetime
+
+
+class ChatHistoryResponse(BaseModel):
+    """Full conversation history for a session."""
+
+    session_id: str
+    messages: list[ChatMessageResponse]

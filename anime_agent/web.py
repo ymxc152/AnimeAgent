@@ -2,7 +2,7 @@
 
 import asyncio
 from collections.abc import AsyncGenerator
-from contextlib import asynccontextmanager
+from contextlib import asynccontextmanager, suppress
 from datetime import UTC, datetime
 from pathlib import Path
 from typing import Any, cast
@@ -33,6 +33,8 @@ from anime_agent.web_schemas import (
     AutoSubscribeRuleCreateRequest,
     AutoSubscribeRuleResponse,
     AutoSubscribeRuleUpdateRequest,
+    ChatHistoryResponse,
+    ChatMessageResponse,
     ChatRequest,
     ChatResponse,
     DiscoverySubscribeRequest,
@@ -205,14 +207,54 @@ async def stats(db: AsyncSession = Depends(get_db)) -> dict[str, Any]:
 
 @app.post("/api/chat", response_model=ChatResponse)
 async def chat(payload: ChatRequest, db: AsyncSession = Depends(get_db)) -> ChatResponse:
-    """Natural-language status query endpoint."""
-    agent = ConversationalAgent(db)
-    result = await agent.chat(payload.message)
+    """Natural-language chat endpoint with multi-turn support."""
+    from anime_agent.tools.llm_tool import LLMTool
+
+    llm_tool = LLMTool()
+    agent = ConversationalAgent(db, llm_tool=llm_tool)
+    result = await agent.chat(payload.message, session_id=payload.session_id)
     return ChatResponse(
         reply=result["reply"],
         intent=result["intent"],
         data=result["data"],
+        session_id=result["session_id"],
     )
+
+
+@app.get("/api/chat/history", response_model=ChatHistoryResponse)
+async def chat_history(
+    session_id: str, db: AsyncSession = Depends(get_db)
+) -> ChatHistoryResponse:
+    """Return conversation history for a session."""
+    import json
+
+    store = Store(db)
+    messages = await store.chat_messages.list_by_session(session_id, limit=100)
+    items = []
+    for m in messages:
+        intent = None
+        if m.intent_json:
+            with suppress(json.JSONDecodeError, TypeError):
+                intent = json.loads(cast(str, m.intent_json))
+        items.append(
+            ChatMessageResponse(
+                role=cast(str, m.role),
+                content=cast(str, m.content),
+                intent=intent,
+                created_at=m.created_at,  # type: ignore[arg-type]
+            )
+        )
+    return ChatHistoryResponse(session_id=session_id, messages=items)
+
+
+@app.delete("/api/chat/history")
+async def chat_history_delete(
+    session_id: str, db: AsyncSession = Depends(get_db)
+) -> dict[str, str]:
+    """Clear conversation history for a session."""
+    store = Store(db)
+    await store.chat_messages.delete_session(session_id)
+    return {"status": "ok"}
 
 
 @app.get("/api/subscriptions")

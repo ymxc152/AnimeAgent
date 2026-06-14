@@ -9,6 +9,7 @@ import {
   ScrollText,
   Sparkles,
   RefreshCw,
+  MessageCircle,
 } from 'lucide-react'
 import { useI18n } from '../i18n/useI18n'
 import { Button, LanguageSwitch } from './ui'
@@ -20,6 +21,7 @@ const navItems = [
   { path: '/discovery', key: 'discovery', icon: Compass },
   { path: '/rss-sources', key: 'rssSources', icon: Rss },
   { path: '/logs', key: 'logs', icon: ScrollText },
+  { path: '/chat', key: 'chat', icon: MessageCircle },
 ] as const
 
 export function Layout() {

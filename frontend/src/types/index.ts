@@ -180,3 +180,22 @@ export type AutoSubscribeRuleUpdateRequest = Partial<AutoSubscribeRuleCreateRequ
 export interface AnimeSearchResponse {
   candidates: AnimeLookup[]
 }
+
+export interface ChatMessage {
+  role: 'user' | 'assistant'
+  content: string
+  intent?: Record<string, unknown>
+  created_at: string
+}
+
+export interface ChatReply {
+  reply: string
+  intent: Record<string, unknown>
+  data: unknown
+  session_id: string
+}
+
+export interface ChatHistory {
+  session_id: string
+  messages: ChatMessage[]
+}

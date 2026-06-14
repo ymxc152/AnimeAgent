@@ -210,3 +210,17 @@ class ErrorLog(Base):
     llm_reasoning = Column(Text)
     resolution = Column(String)  # "bash_fixed" / "retry_success" / "skip" / "exhausted"
     created_at = Column(DateTime, default=datetime.utcnow)
+
+
+class ChatMessage(Base):
+    """A single message in a chat conversation."""
+
+    __tablename__ = "chat_messages"
+
+    id = Column(Integer, primary_key=True)
+    session_id = Column(String(64), index=True, nullable=False)
+    role = Column(String(16), nullable=False)  # "user" | "assistant"
+    content = Column(Text, nullable=False)
+    intent_json = Column(Text)  # Parsed intent as JSON string (assistant only)
+    data_json = Column(Text)  # Query result data as JSON string (assistant only)
+    created_at = Column(DateTime, default=datetime.utcnow)

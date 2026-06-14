@@ -5,6 +5,8 @@ import type {
   AutoSubscribeRule,
   AutoSubscribeRuleCreateRequest,
   AutoSubscribeRuleUpdateRequest,
+  ChatHistory,
+  ChatReply,
   DiscoveryAnime,
   Episode,
   EpisodeDetail,
@@ -177,4 +179,18 @@ export async function updateAutoSubscribeRule(
 
 export async function deleteAutoSubscribeRule(id: number): Promise<void> {
   await api.delete(`/auto-subscribe-rules/${id}`)
+}
+
+export async function sendChatMessage(message: string, sessionId?: string): Promise<ChatReply> {
+  const { data } = await api.post('/chat', { message, session_id: sessionId })
+  return data
+}
+
+export async function getChatHistory(sessionId: string): Promise<ChatHistory> {
+  const { data } = await api.get('/chat/history', { params: { session_id: sessionId } })
+  return data
+}
+
+export async function clearChatHistory(sessionId: string): Promise<void> {
+  await api.delete('/chat/history', { params: { session_id: sessionId } })
 }
