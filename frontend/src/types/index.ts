@@ -35,7 +35,6 @@ export interface Episode {
   status: string
   content_type: string
   torrent_hash: string | null
-  torrent_info_hash: string | null
   torrent_title: string | null
   torrent_name: string | null
   torrent_link: string | null

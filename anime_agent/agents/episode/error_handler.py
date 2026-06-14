@@ -7,6 +7,7 @@ from typing import Any
 from anime_agent.agents.episode.error_prompts import NODE_PROMPTS, SYSTEM_SUFFIX
 from anime_agent.tools.base import BaseTool
 from anime_agent.tools.bash_tool import BashTool, BashToolInput
+from anime_agent.tools.llm_tool import LLMToolInput
 from anime_agent.utils.logger import logger
 
 # Short-term memory: max error logs to include as context.
@@ -34,7 +35,7 @@ class ErrorHandlerNode:
     ):
         if llm_tool is None:
             from anime_agent.tools.llm_tool import LLMTool
-            self.llm_tool = LLMTool()
+            self.llm_tool: BaseTool = LLMTool()
         else:
             self.llm_tool = llm_tool
         self.bash_tool = bash_tool or BashTool()
@@ -179,10 +180,10 @@ class ErrorHandlerNode:
         )
 
         result = await self.llm_tool.invoke(
-            {
-                "prompt": prompt,
-                "system_msg": system_msg,
-                "json_schema": {
+            LLMToolInput(
+                prompt=prompt,
+                system_msg=system_msg,
+                json_schema={
                     "type": "object",
                     "properties": {
                         "reasoning": {"type": "string", "description": "你的分析"},
@@ -191,7 +192,7 @@ class ErrorHandlerNode:
                     },
                     "required": ["reasoning", "action"],
                 },
-            }
+            )
         )
 
         if not result.success:
@@ -209,7 +210,9 @@ class ErrorHandlerNode:
 
         # Try parsing as JSON directly
         try:
-            return json.loads(text.strip())
+            parsed = json.loads(text.strip())
+            if isinstance(parsed, dict):
+                return parsed
         except json.JSONDecodeError:
             pass
 
@@ -217,7 +220,9 @@ class ErrorHandlerNode:
         brace_match = re.search(r"\{.*\}", text, re.DOTALL)
         if brace_match:
             try:
-                return json.loads(brace_match.group(0))
+                parsed = json.loads(brace_match.group(0))
+                if isinstance(parsed, dict):
+                    return parsed
             except json.JSONDecodeError:
                 pass
 

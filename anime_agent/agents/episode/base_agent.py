@@ -7,6 +7,7 @@ from typing import Any
 
 from anime_agent.tools.base import BaseTool
 from anime_agent.tools.bash_tool import BashTool, BashToolInput
+from anime_agent.tools.llm_tool import LLMToolInput
 from anime_agent.utils.logger import logger
 
 
@@ -54,7 +55,7 @@ class BaseAgentNode(ABC):
     ):
         if llm_tool is None:
             from anime_agent.tools.llm_tool import LLMTool
-            self.llm_tool = LLMTool()
+            self.llm_tool: BaseTool = LLMTool()
         else:
             self.llm_tool = llm_tool
         self.bash_tool = bash_tool or BashTool()
@@ -98,7 +99,7 @@ class BaseAgentNode(ABC):
         user_prompt = self._build_prompt(context, state)
 
         actions_desc = "\n".join(f"- {k}: {v}" for k, v in self.ACTIONS.items())
-        json_schema = {
+        json_schema: dict[str, Any] = {
             "type": "object",
             "properties": {
                 "action": {
@@ -140,10 +141,10 @@ class BaseAgentNode(ABC):
 {json.dumps(json_schema, ensure_ascii=False, indent=2)}
 """
         result = await self.llm_tool.invoke(
-            {
-                "prompt": user_prompt,
-                "system_msg": full_system,
-            }
+            LLMToolInput(
+                prompt=user_prompt,
+                system_msg=full_system,
+            )
         )
 
         if not result.success:
@@ -235,14 +236,18 @@ class BaseAgentNode(ABC):
             text = json_match.group(1)
 
         try:
-            return json.loads(text.strip())
+            parsed = json.loads(text.strip())
+            if isinstance(parsed, dict):
+                return parsed
         except json.JSONDecodeError:
             pass
 
         brace_match = re.search(r"\{.*\}", text, re.DOTALL)
         if brace_match:
             try:
-                return json.loads(brace_match.group(0))
+                parsed = json.loads(brace_match.group(0))
+                if isinstance(parsed, dict):
+                    return parsed
             except json.JSONDecodeError:
                 pass
 

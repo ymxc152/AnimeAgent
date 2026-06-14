@@ -13,7 +13,7 @@ class QBSyncService:
     """Poll qBittorrent and update Episode download progress fields.
 
     The service matches qBittorrent torrents against ``Episode.torrent_hash``
-    or ``Episode.torrent_info_hash`` and updates status/speed/timestamps.
+    and updates status/speed/timestamps.
     Only episodes that are currently downloading or have an active torrent
     are touched; terminal states are left unchanged.
     """
@@ -45,20 +45,20 @@ class QBSyncService:
 
         updated = 0
         for episode in episodes:
-            ep_hash = (episode.torrent_hash or episode.torrent_info_hash or "").lower()
+            ep_hash = (episode.torrent_hash or "").lower()
             if not ep_hash:
                 continue
             status = hash_to_status.get(ep_hash)
             if status is None:
                 continue
 
-            episode.torrent_status = str(status.get("state", ""))
-            episode.torrent_last_speed = float(status.get("download_speed", 0))
-            episode.torrent_progress = float(status.get("progress", 0.0))
-            episode.torrent_added_at = status.get("added_at")
-            episode.torrent_checked_at = status.get("last_speed_at")
+            episode.torrent_status = str(status.get("state", ""))  # type: ignore[assignment]
+            episode.torrent_last_speed = float(status.get("download_speed", 0))  # type: ignore[assignment]
+            episode.torrent_progress = float(status.get("progress", 0.0))  # type: ignore[assignment]
+            episode.torrent_added_at = status.get("added_at")  # type: ignore[assignment]
+            episode.torrent_checked_at = status.get("last_speed_at")  # type: ignore[assignment]
             if episode.status == "matched":
-                episode.status = "downloading"
+                episode.status = "downloading"  # type: ignore[assignment]
             updated += 1
 
         if updated:

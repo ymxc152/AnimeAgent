@@ -5,6 +5,7 @@ from typing import Any
 from anime_agent.agents.episode.agent_prompts import SEND_DOWNLOAD_ACTIONS, SEND_DOWNLOAD_SYSTEM
 from anime_agent.agents.episode.base_agent import BaseAgentNode
 from anime_agent.tools.base import BaseTool
+from anime_agent.tools.bash_tool import BashToolInput
 from anime_agent.tools.qb_tool import QBTool, QBToolInput
 
 
@@ -56,7 +57,7 @@ class SendDownloadNode(BaseAgentNode):
                 cmd = "tasklist /fi \"imagename eq qbittorrent.exe\" 2>nul"
             else:
                 cmd = "pgrep -a qbittorrent"
-            result = await self.bash_tool.invoke({"command": cmd})
+            result = await self.bash_tool.invoke(BashToolInput(command=cmd))
             return {
                 "success": result.success,
                 "output": result.data.get("stdout", "")[:500] if result.success else result.error,

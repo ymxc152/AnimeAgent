@@ -5,6 +5,7 @@ import os
 import platform
 import re
 import sys
+from typing import Any
 
 from anime_agent.tools.base import BaseTool, ToolInput, ToolOutput
 from anime_agent.utils.logger import logger
@@ -167,13 +168,17 @@ class BashTool(BaseTool):
 
         # ── Step 4: Execute with timeout ──
         try:
+            subprocess_kwargs: dict[str, Any] = {
+                "stdout": asyncio.subprocess.PIPE,
+                "stderr": asyncio.subprocess.PIPE,
+                "env": safe_env,
+            }
+            if sys.platform == "win32":
+                subprocess_kwargs["creationflags"] = 0x08000000
+
             process = await asyncio.create_subprocess_exec(
                 *shell_cmd,
-                stdout=asyncio.subprocess.PIPE,
-                stderr=asyncio.subprocess.PIPE,
-                env=safe_env,
-                # Windows: hide console window
-                **( {"creationflags": 0x08000000} if sys.platform == "win32" else {} ),
+                **subprocess_kwargs,
             )
 
             stdout_bytes, stderr_bytes = await asyncio.wait_for(

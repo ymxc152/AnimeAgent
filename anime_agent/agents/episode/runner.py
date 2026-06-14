@@ -73,10 +73,6 @@ class EpisodeGraphRunner:
         failed_hashes = self._load_json(cast(str | None, episode.torrent_failed_hashes), default=[])
 
         info_hash = cast(str | None, episode.torrent_hash)
-        if not info_hash:
-            # Backward compatibility: some rows may still store the hash in
-            # torrent_info_hash while torrent_hash is empty.
-            info_hash = cast(str | None, episode.torrent_info_hash)
         link = cast(str | None, episode.torrent_link)
         matched_torrent = None
         if info_hash or link:
@@ -185,11 +181,8 @@ class EpisodeGraphRunner:
         self._set(episode, "status", final.get("status", episode.status))
         self._set(episode, "torrent_candidates", json.dumps(final.get("torrent_candidates", [])))
         # Use the actual qBittorrent hash as the single source of truth.
-        # Keep torrent_info_hash in sync for backward compatibility until a
-        # future migration removes the redundant column.
         hash_value = final.get("torrent_hash") or (final.get("matched_torrent") or {}).get("info_hash")
         self._set(episode, "torrent_hash", hash_value)
-        self._set(episode, "torrent_info_hash", hash_value)
         self._set(episode, "torrent_name", final.get("torrent_name"))
         matched = final.get("matched_torrent") or {}
         self._set(episode, "torrent_title", matched.get("title"))

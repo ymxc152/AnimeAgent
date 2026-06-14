@@ -11,6 +11,7 @@ from anime_agent.agents.episode.agent_prompts import (
 from anime_agent.agents.episode.base_agent import BaseAgentNode
 from anime_agent.config import settings
 from anime_agent.tools.base import BaseTool
+from anime_agent.tools.bash_tool import BashToolInput
 from anime_agent.tools.filesystem_tool import FileSystemTool, FileSystemToolInput
 
 _VIDEO_EXTENSIONS = {".mkv", ".mp4", ".avi", ".mov", ".wmv", ".flv", ".webm"}
@@ -96,7 +97,7 @@ class OrganizeFilesNode(BaseAgentNode):
             command = action.params.get("command", "")
             if command:
                 result = await self.bash_tool.invoke(
-                    {"command": command}  # BashToolInput
+                    BashToolInput(command=command)
                 )
                 return {
                     "success": result.success,

@@ -73,7 +73,6 @@ class Episode(Base):
     torrent_hash = Column(String, index=True)
     torrent_name = Column(String)
     torrent_title = Column(String)
-    torrent_info_hash = Column(String, index=True)
     torrent_link = Column(String)
     content_type = Column(String, default="TV")  # TV/SP/OVA/Movie
     download_path = Column(String)

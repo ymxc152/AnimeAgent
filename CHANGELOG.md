@@ -14,7 +14,7 @@
 ### Fixed / Improved
 - Scheduler 增加播出时间门控，优先使用 `episode.aired_at`，fallback 到订阅的 expected_airing_weekday/time
 - DiscoveryService 移除硬编码 12 集兜底，支持 `discovery_default_total_episodes` 配置与 Movie/OVA/ONA 格式感知默认
-- `torrent_hash` / `torrent_info_hash` 字段统一，避免持久化不一致
+- `torrent_hash` / `torrent_info_hash` 字段统一：删除模型冗余字段，启动时自动将旧数据从 `torrent_info_hash` 迁移到 `torrent_hash`，代码层面只使用单一字段
 - `OrganizeFilesNode` 使用 Subscription 真实 `season`
 - `ScheduleResumeNode` 区分 RSS 等待间隔与下载轮询间隔
 - `AnimeGardenTool` 补齐配置项（base URL、timeout、cache TTL），实现 1 小时内存缓存；`search_resources` 支持 fallback 开关与多页搜索
@@ -33,4 +33,5 @@
 
 ### Known Limitations
 - 对话层已支持状态查询；自然语言订阅与多轮澄清尚未实现
-- 完结检测服务已实现但尚未接入 Scheduler
+- `CompletionChecker` 外部状态分支存在不可达代码，待重构
+- 全量 pytest 串行执行约 5~8 分钟，尚未引入并发加速

@@ -340,7 +340,7 @@ export function Episodes() {
               <DetailSection title={t.episodes.detail.torrentInfo} icon={<Download className="h-4 w-4" />}>
                 <DetailRow label={t.episodes.torrentTitle} value={detail.torrent_title} />
                 <DetailRow label={t.episodes.detail.torrentName} value={detail.torrent_name} />
-                <DetailRow label={t.episodes.detail.infoHash} value={detail.torrent_info_hash || detail.torrent_hash} />
+                <DetailRow label={t.episodes.detail.infoHash} value={detail.torrent_hash} />
                 <DetailRow label={t.episodes.detail.qbStatus} value={detail.torrent_status} />
                 <DetailRow label={t.episodes.detail.progress} value={formatProgress(detail.torrent_progress)} />
                 <DetailRow label={t.episodes.detail.downloadSpeed} value={formatSpeed(detail.torrent_last_speed)} />

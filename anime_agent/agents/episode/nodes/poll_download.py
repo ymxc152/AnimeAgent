@@ -11,6 +11,7 @@ from anime_agent.agents.episode.base_agent import BaseAgentNode
 from anime_agent.config import settings
 from anime_agent.services.torrent_health import TorrentHealth
 from anime_agent.tools.base import BaseTool
+from anime_agent.tools.bash_tool import BashToolInput
 from anime_agent.tools.qb_tool import QBTool, QBToolInput
 from anime_agent.utils.logger import logger
 
@@ -113,7 +114,7 @@ class PollDownloadNode(BaseAgentNode):
                 cmd = "wmic logicaldisk where DeviceID='C:' get FreeSpace,Size /format:csv"
             else:
                 cmd = "df -h /"
-            result = await self.bash_tool.invoke({"command": cmd})
+            result = await self.bash_tool.invoke(BashToolInput(command=cmd))
             return {
                 "success": result.success,
                 "output": result.data.get("stdout", "")[:1000] if result.success else result.error,

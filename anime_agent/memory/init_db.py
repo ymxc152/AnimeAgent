@@ -24,12 +24,22 @@ def _migrate_subscriptions_columns(connection: Any) -> None:
 
 
 def _migrate_episodes_columns(connection: Any) -> None:
-    """Add torrent_progress column to existing episodes tables."""
+    """Add torrent_progress column and migrate torrent_hash data."""
     inspector = inspect(connection)
     columns = {col["name"] for col in inspector.get_columns("episodes")}
 
     if "torrent_progress" not in columns:
         connection.execute(text("ALTER TABLE episodes ADD COLUMN torrent_progress FLOAT DEFAULT 0.0"))
+
+    # Migrate legacy torrent_info_hash values into torrent_hash if the latter is empty.
+    if "torrent_info_hash" in columns:
+        connection.execute(
+            text(
+                "UPDATE episodes SET torrent_hash = torrent_info_hash "
+                "WHERE (torrent_hash IS NULL OR torrent_hash = '') "
+                "AND (torrent_info_hash IS NOT NULL AND torrent_info_hash != '')"
+            )
+        )
 
 
 async def init_database() -> None:

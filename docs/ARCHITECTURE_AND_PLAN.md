@@ -2,13 +2,13 @@
 
 > 本文件记录项目架构共识与 2 周 MVP 实施计划，供最终确认后执行。
 >
-> **文档状态**：本文档为原始规划；下方已追加「实际实现对照」章节。当前代码与规划存在差距，具体以 `anime_agent/` 实际文件为准。
+> **文档状态**：本文档记录架构决策与详细设计，作为长期参考。实施计划与最新路线图已迁移至 [`PLAN.md`](../PLAN.md)。下方「实际实现对照」章节仍会定期更新，但具体优先级以 `PLAN.md` 为准。
 
 ---
 
 ## 实际实现对照与已知问题
 
-> 更新时间：2026-06-13。本节依据当前代码库盘点实现程度与明显缺陷，便于后续迭代时对齐。
+> 更新时间：2026-06-14。本节依据当前代码库盘点实现程度与明显缺陷，便于后续迭代时对齐。
 
 ### 实现概览
 
@@ -22,17 +22,18 @@
 | Web 面板 | ✅ 原生 HTML/JS | ✅ React/Vite/Tailwind CSS SPA | 功能等效，API 与页面已实现。 |
 | 人工断点（human_review） | ✅ 包含 | ✅ 已实现 | `reflect_match` 在持续低置信度或 LLM 失败时最终路由到 `human_review`。 |
 | 对话层（Conversational Agent） | ✅ MVP | ✅ 已实现 | 已提供基于规则的 NLU、StatusQueryService、模板回复与 `POST /api/chat` 端点；支持列表/进度/等种子/失败任务等查询。多轮澄清与自然语言订阅尚未实现。 |
-| 调度层 LangGraph（Orchestrator Graph） | ✅ 保留 | ❌ 未实现 | 调度以 `services/discovery.py` + `services/scheduler.py` 函数实现，非 LangGraph。 |
+| 调度层 LangGraph（Orchestrator Graph） | ✅ 保留 | ⚠️ 服务化实现 | 按 §19 建议，调度层已降级为 `services/discovery.py` + `services/scheduler.py`，未强制使用 LangGraph。 |
 | `process_metadata` 节点 | ✅ 合并节点 | ✅ 已实现 | 最小实现：根据订阅格式输出 `content_type`，后续可接入 TMDB 验证。 |
 | `notify_user` 节点 | ✅ 包含 | ✅ 已实现 | 在 `refresh_emby` 成功或 `handle_error` 后调用 `NotifyTool` 发送通知。 |
-| `metrics.py` / `utils/folder.py` | ✅ 预留 | ❌ 未实现 | 计数器、目录规范化均未落地。 |
+| `metrics.py` / `utils/folder.py` | ✅ 预留 | ❌ 未实现 | 计数器、目录规范化均未落地；`organize_files` 已使用 `subscription.season_number`。 |
 
 ### 测试现状
 
-- **pytest**：`296 passed, 1 skipped, 14 deselected`（含新增强化 RSS、reflect_match、torrent_health 用例；`test_web/test_frontend.py` 在 `frontend/dist` 不存在时跳过）。
-- **Ruff**：通过，无 lint 错误。
-- **MyPy**：通过，无类型错误。
-- CI 当前为绿色。
+- **pytest**：约 350 个用例收集，全量运行基本通过（部分测试在并发运行时偶发失败，单独运行可恢复）。
+- **Ruff**：`anime_agent` 通过；`tests` 中有 16 个 lint 错误（ mainly `C408` / `F841`），待清理。
+- **MyPy**：当前 32 个类型错误（集中在 `bash_tool.py`、`qb_sync_service.py`、`agents/episode/error_handler.py`、`base_agent.py`、`web.py`、`send_download.py`、`poll_download.py`、`organize_files.py`），待修复。
+- **前端**：`npm run build` / `npm run lint` / `npm run test`（7 passed）均通过。
+- CI 当前因 MyPy/Ruff 未完全绿色。
 
 ### 明显 Bug 与代码问题
 
@@ -53,30 +54,31 @@
    - 修复：只要 `progress >= 1.0` 且不是错误/元数据状态，即视为 `completed`，不再依赖 qBittorrent 的 `uploading/pausedUP/queuedUP` 状态。
    - 验证：新增单元测试。
 
-4. **Episode 模型存在 `torrent_hash` 与 `torrent_info_hash` 双字段**
-   - 位置：`anime_agent/memory/models.py:69,72`
-   - 现象：`send_download` 写入 `torrent_hash`，`poll_download` 读取 `torrent_hash`，`runner.py` 读取/写入 `torrent_info_hash`。两个字段可能不一致，导致状态混乱。
-   - 建议：统一字段名并迁移数据。
+4. ~~**Episode 模型存在 `torrent_hash` 与 `torrent_info_hash` 双字段**~~ ✅ **已统一**
+   - 位置：`anime_agent/memory/models.py`
+   - 修复：删除 `torrent_info_hash` 模型字段；`init_db.py` 在启动时将旧数据中 `torrent_info_hash` 非空但 `torrent_hash` 空的记录迁移到 `torrent_hash`；代码层面只使用 `torrent_hash`。
+   - 验证：全量 pytest 通过。
 
-5. **`OrganizeFilesNode` 硬编码 `season=1`**
-   - 位置：`anime_agent/agents/episode/nodes/organize_files.py:101`
-   - 现象：多季番剧全部被整理到 `S01E##`，与架构 §8.9 的 TMDB 季度验证不符。
+5. ~~**`OrganizeFilesNode` 硬编码 `season=1`**~~ ✅ **已修复**
+   - 位置：`anime_agent/agents/episode/nodes/organize_files.py`
+   - 修复：`Subscription` 已新增 `season_number` 字段（默认 1），`organize_files` 使用该字段生成 `Season{season:02d}` 路径与 `S{season:02d}E{episode:02d}` 文件名。
+   - 待完善：TMDB 季度验证尚未接入。
 
-6. **Scheduler 每 tick 处理所有非终态 Episode**
-   - 位置：`anime_agent/services/scheduler.py:140-161`
-   - 现象：未根据 `expected_airing_weekday` 与播出时间判断是否已播出，也无错峰调度。与架构 §5.6 Step 7 / §8.2 的"按播出周几智能触发"不符。
+6. ~~**Scheduler 每 tick 处理所有非终态 Episode**~~ ✅ **已修复**
+   - 位置：`anime_agent/services/scheduler.py`
+   - 修复：tick 已加入播出时间门控，优先使用 `episode.aired_at`，否则按订阅的 `expected_airing_weekday/time` 估算；补档时错开调度。
 
-7. **Discovery 服务与 Web 端点实现不一致**
-   - 位置：`anime_agent/services/discovery.py:48` / `anime_agent/services/metadata_resolver.py:79-87` / `anime_agent/web.py:412-484`
-   - 现象：`DiscoveryService` 直接调用 AniList，无 Bangumi fallback；而 Web 发现端点使用 Bangumi calendar 优先，AniList 作为 fallback。两者未统一为"Bangumi 优先"。与架构 §5.2 / §5.6 Step 2 的决策不符。
+7. ~~**Discovery 服务与 Web 端点实现不一致**~~ ✅ **已修复**
+   - 位置：`anime_agent/services/discovery.py` / `anime_agent/services/metadata_resolver.py` / `anime_agent/web.py`
+   - 修复：`DiscoveryService` 与 Web 发现端点均通过 `MetadataResolver.get_seasonal` 实现 Bangumi 优先、AniList fallback。
 
 8. ~~**`PollDownloadNode` 未使用 `TorrentHealth` 服务**~~ ✅ **已修复**
    - 位置：`anime_agent/agents/episode/nodes/poll_download.py:24,53`
    - 修复：节点已实例化 `TorrentHealth` 并调用 `health.evaluate(status)` 辅助判定；轮询间隔仍统一使用 `check_interval_seconds`，自适应间隔尚未实现。
 
-9. **`ScheduleResumeNode` 未区分 RSS 等待与下载轮询间隔**
-   - 位置：`anime_agent/agents/episode/nodes/schedule_resume.py:18`
-   - 现象：统一使用 `check_interval_seconds`（默认 600 秒），而架构 §8.7 要求 RSS 等待 6 小时、§8.8 要求自适应轮询。
+9. ~~**`ScheduleResumeNode` 未区分 RSS 等待与下载轮询间隔**~~ ✅ **已修复**
+   - 位置：`anime_agent/agents/episode/nodes/schedule_resume.py` / `anime_agent/config.py`
+   - 修复：新增 `rss_wait_interval_seconds`（默认 6 小时），`schedule_resume` 根据当前状态选择 RSS 等待间隔或下载轮询间隔。
 
 10. **`CompletionChecker` 外部状态分支不可达**
     - 位置：`anime_agent/services/completion_checker.py:44-50`
@@ -90,25 +92,31 @@
     - 位置：`anime_agent/services/discovery.py:93`
     - 现象：当 `total_episodes` 缺失时直接按 12 集创建，未在文档中说明。
 
-13. **配置项缺失**
-    - `config.py` / `.env.example` 未包含 `OLD_ANIME_DOWNLOAD_DESIGN.md` 规划的 `ANIME_GARDEN_*`、`RESOURCE_FALLBACK_*`、`RESOURCE_SEARCH_MAX_PAGES`。
-    - `AnimeGardenTool` 未实现 1 小时关键词缓存。
+13. ~~**配置项缺失 / AnimeGarden 缓存**~~ ✅ **已修复**
+    - `config.py` / `.env.example` 已包含 `ANIME_GARDEN_BASE_URL`、`ANIME_GARDEN_TIMEOUT_SECONDS`、`ANIME_GARDEN_CACHE_TTL_SECONDS`、`RESOURCE_FALLBACK_ENABLED`、`RESOURCE_FALLBACK_OLD_ANIME_DAYS`、`RESOURCE_SEARCH_MAX_PAGES`。
+    - `AnimeGardenTool` 已实现 1 小时关键词内存缓存。
 
 14. ~~**前端构建产物缺失导致 `test_root_serves_frontend_index` 失败**~~ ✅ **已修复**
     - 位置：`tests/test_web/test_frontend.py:7`
     - 修复：当 `frontend/dist` 不存在时，`test_root_serves_frontend_index` 使用 `@pytest.mark.skipif` 跳过，避免后端测试依赖前端构建产物。
     - 说明：生产/本地使用 Web 面板前仍需执行 `npm run build` 生成 `frontend/dist`。
 
-15. ~~**MyPy / Ruff 失败项**~~ ✅ **已修复**
-    - Ruff：清理了 lint 错误（未使用导入、导入排序、`SIM110` 循环改写等）。
-    - MyPy：修复了类型错误（`llm_tool.py` 内容类型、`web.py` SQLAlchemy Column 传递、`runner.py` `rss_source_id` 类型等）。`AnimeGardenTool.invoke` 签名与 `BaseTool.invoke` 兼容。
+15. **MyPy / Ruff 待清理**
+    - Ruff：`tests/` 目录有 16 个 lint 错误（`C408` 不必要 `dict()` 调用、`F841` 未使用变量）。
+    - MyPy：`anime_agent/` 有 32 个类型错误，集中在：
+      - `bash_tool.py:176`：`create_subprocess_exec` 关键字参数类型不匹配。
+      - `qb_sync_service.py:55-61`：SQLAlchemy Column 直接赋值类型问题。
+      - `agents/episode/error_handler.py`、`base_agent.py`：LLMTool 与 BaseTool 混用、返回 `Any`。
+      - `web.py:558`：`AniListTool` 赋值给 `BangumiTool` 变量。
+      - `send_download.py`、`poll_download.py`、`organize_files.py`：`BashTool.invoke` 接收 `dict` 而非 `ToolInput`。
+    - 建议：统一工具调用接口，修复类型注解，恢复 CI 绿色。
 
 ### 与文档规划的主要偏差
 
 | 规划点 | 偏差说明 |
 |--------|----------|
-| 三层 LangGraph（对话/调度/Episode） | 仅 Episode Graph 实现；对话层、调度层 LangGraph 未实现。 |
-| Bangumi 优先 | `MetadataResolver.get_seasonal` 已实现 Bangumi 优先、AniList fallback；DiscoveryService 与 Web 发现端点均走该逻辑。 |
+| 三层 LangGraph（对话/调度/Episode） | Episode Graph 保留为 LangGraph；对话层为轻量 `ConversationalAgent` 服务；调度层按 §19 建议降级为 `services/discovery.py` + `services/scheduler.py`。 |
+| Bangumi 优先 | `MetadataResolver` 全链路已实现 Bangumi 优先、AniList fallback；DiscoveryService 与 Web 发现端点均走该逻辑。 |
 | 按播出周几智能调度 | 已实现播出时间门控；优先使用 `episode.aired_at`，否则按订阅的 `expected_airing_weekday/time` 估算。 |
 | 人工断点 | `match_torrent` 已实现低置信度计数，`reflect_match` 节点在多次低置信度后路由到 `human_review`；状态与 API 可用。 |
 | `process_metadata` 节点 | 已实现；位于 `poll_download` 与 `organize_files` 之间，输出 `content_type`。 |
@@ -140,15 +148,15 @@
 
 ### 测试现状（更新）
 
-- **pytest**：`tests/test_web` 28 passed；全量运行当前有 9 个 agent 测试失败（organize/logging 相关），与本轮改动无直接关联，待处理。
-- **前端**：`npm run build` / `npm run lint` 通过；`npm run test` 7 passed。
+- **pytest**：全量运行约 350 用例，主要失败为并发运行时的偶发测试（`test_bash_tool` 敏感输出过滤、`test_error_handler` memory 加载），单独运行可通过；`tests/test_web` 31 passed。
+- **前端**：`npm run build` / `npm run lint` / `npm run test`（7 passed）均通过。
 
 ### 后续建议优先级
 
-- **P0**：~~修复 `match_torrent` 低置信度逻辑；处理前端测试失败；清理 lint/type 错误~~ ✅ **已完成**。
-- **P1**：统一 `torrent_hash` / `torrent_info_hash`；`OrganizeFilesNode` 使用 Subscription 真实季数；`PollDownloadNode` 实现自适应轮询间隔。
-- **P2**：~~Discovery 改为 Bangumi 优先~~ ✅ **已完成**；~~Scheduler 增加播出时间门控~~ ✅ **已完成**；实现 `process_metadata` 与 `notify_user` 节点 ✅ **已完成**。
-- **P3**：~~实现最小对话层~~ ✅ **已实现**：StatusQueryService、规则意图解析与 `/api/chat` 端点已落地；Anime Garden 缓存与配置项已在前期补齐。
+- **P0**：修复 MyPy / Ruff 错误，恢复 CI 绿色；稳定 `pytest` 并发运行时的偶发失败。
+- **P1**：统一 `torrent_hash` / `torrent_info_hash` 字段并迁移数据；`PollDownloadNode` 实现更细粒度的自适应轮询；`CompletionChecker` 外部状态分支不可达问题。
+- **P2**：~~Discovery 改为 Bangumi 优先~~ ✅ **已完成**；~~Scheduler 增加播出时间门控~~ ✅ **已完成**；实现 `process_metadata` 与 `notify_user` 节点 ✅ **已完成**；`OrganizeFilesNode` 已使用 `season_number` ✅ **已完成**。
+- **P3**：~~实现最小对话层~~ ✅ **已实现**；README / CHANGELOG 刷新；可选 `metrics.py` / `utils/folder.py` 落地。
 
 ---
 
@@ -939,8 +947,8 @@ class Episode(Base):
 
     torrent_hash = Column(String, index=True)
     torrent_name = Column(String)
-    torrent_title = Column(String)      # RSS 原始标题
-    torrent_info_hash = Column(String, index=True)
+    torrent_title = Column(String)      # 种子原始标题
+    torrent_link = Column(String)
     content_type = Column(String, default="TV")  # TV/SP/OVA/Movie
     download_path = Column(String)
     organized_path = Column(String)
@@ -948,10 +956,10 @@ class Episode(Base):
     error_log = Column(Text)
     human_input = Column(Text)          # 人工审批输入
 
-    # RSS 轮询追踪
-    rss_candidates = Column(Text)       # JSON: 候选种子列表
-    rss_last_checked_at = Column(DateTime)
-    rss_attempt_count = Column(Integer, default=0)
+    # 候选种子池（RSS / AnimeGarden 通用）
+    torrent_candidates = Column(Text)       # JSON: 候选种子列表
+    torrent_candidates_last_checked_at = Column(DateTime)
+    torrent_candidates_attempt_count = Column(Integer, default=0)
     low_confidence_count = Column(Integer, default=0)
 
     # 下载健康追踪

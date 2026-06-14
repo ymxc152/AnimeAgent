@@ -194,7 +194,6 @@ class EpisodeResponse(BaseModel):
     status: str
     content_type: str
     torrent_hash: str | None
-    torrent_info_hash: str | None
     torrent_title: str | None
     torrent_name: str | None
     torrent_link: str | None
