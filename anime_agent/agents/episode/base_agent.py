@@ -55,6 +55,7 @@ class BaseAgentNode(ABC):
     ):
         if llm_tool is None:
             from anime_agent.tools.llm_tool import LLMTool
+
             self.llm_tool: BaseTool = LLMTool()
         else:
             self.llm_tool = llm_tool
@@ -164,7 +165,9 @@ class BaseAgentNode(ABC):
                 result = await self.bash_tool.invoke(BashToolInput(command=command))
                 return {
                     "success": result.success,
-                    "output": result.data.get("stdout", "")[:2000] if result.success else result.error,
+                    "output": result.data.get("stdout", "")[:2000]
+                    if result.success
+                    else result.error,
                 }
         return {"success": True, "output": "No action executed"}
 
@@ -175,6 +178,7 @@ class BaseAgentNode(ABC):
     def _build_system_prompt(self) -> str:
         """Build the full system prompt with OS info."""
         import platform
+
         os_type = platform.system()
         return f"""{self.SYSTEM_PROMPT}
 
@@ -219,6 +223,7 @@ class BaseAgentNode(ABC):
         return {
             "status": "failed",
             "errors": [f"{self.NODE_NAME} agent error: {error}"],
+            "_error_handler_node": self.NODE_NAME,
         }
 
     def _exhausted_result(self, state: dict[str, Any]) -> dict[str, Any]:
@@ -226,6 +231,7 @@ class BaseAgentNode(ABC):
         return {
             "status": "failed",
             "errors": [f"{self.NODE_NAME} agent exhausted {self.MAX_LLM_CALLS} iterations"],
+            "_error_handler_node": self.NODE_NAME,
         }
 
     @staticmethod

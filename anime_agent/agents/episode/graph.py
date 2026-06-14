@@ -91,6 +91,10 @@ def _after_send_download(state: EpisodeAgentState) -> str:
     status = state.get("status")
     if status == "downloading":
         return "poll_download"
+    if status == "retry_match":
+        # send_download failed (qB error, duplicate hash, bad link, etc.)
+        # Let the matcher pick another candidate, excluding the failed hash.
+        return "match_torrent"
     return "error_handler"
 
 
@@ -134,8 +138,14 @@ def _after_error_handler(state: EpisodeAgentState) -> str:
         target = status.replace("retry_", "")
         # Map to valid node names
         valid_nodes = {
-            "fetch_rss", "match_torrent", "search_resources", "send_download",
-            "poll_download", "process_metadata", "organize_files", "refresh_emby",
+            "fetch_rss",
+            "match_torrent",
+            "search_resources",
+            "send_download",
+            "poll_download",
+            "process_metadata",
+            "organize_files",
+            "refresh_emby",
         }
         return target if target in valid_nodes else "handle_error"
     if status == "skipped":
@@ -171,13 +181,17 @@ def build_episode_graph(**node_overrides: Any) -> CompiledStateGraph:
         node_overrides.get("fetch_rss", FetchRSSNode(session_factory=session_factory)),
     )
     builder.add_node("match_torrent", node_overrides.get("match_torrent", MatchTorrentNode()))
-    builder.add_node("search_resources", node_overrides.get("search_resources", SearchResourcesNode()))
+    builder.add_node(
+        "search_resources", node_overrides.get("search_resources", SearchResourcesNode())
+    )
     builder.add_node(
         "send_download",
         node_overrides.get("send_download", SendDownloadNode(session_factory=session_factory)),
     )
     builder.add_node("poll_download", node_overrides.get("poll_download", PollDownloadNode()))
-    builder.add_node("process_metadata", node_overrides.get("process_metadata", ProcessMetadataNode()))
+    builder.add_node(
+        "process_metadata", node_overrides.get("process_metadata", ProcessMetadataNode())
+    )
     builder.add_node("organize_files", node_overrides.get("organize_files", OrganizeFilesNode()))
     builder.add_node("refresh_emby", node_overrides.get("refresh_emby", RefreshEmbyNode()))
     builder.add_node("human_review", node_overrides.get("human_review", HumanReviewNode()))

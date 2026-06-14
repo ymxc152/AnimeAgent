@@ -23,7 +23,7 @@ class SendDownloadNode(BaseAgentNode):
     NODE_NAME = "send_download"
     SYSTEM_PROMPT = SEND_DOWNLOAD_SYSTEM
     ACTIONS = SEND_DOWNLOAD_ACTIONS
-    MAX_LLM_CALLS = 2
+    MAX_LLM_CALLS = 3
     TERMINAL_ACTIONS = {"add", "abort"}
 
     def __init__(
@@ -63,8 +63,9 @@ class SendDownloadNode(BaseAgentNode):
             return await self._execute_add(state)
         if action.type == "check_qb":
             import platform
+
             if platform.system() == "Windows":
-                cmd = "tasklist /fi \"imagename eq qbittorrent.exe\" 2>nul"
+                cmd = 'tasklist /fi "imagename eq qbittorrent.exe" 2>nul'
             else:
                 cmd = "pgrep -a qbittorrent"
             result = await self.bash_tool.invoke(BashToolInput(command=cmd))
@@ -99,8 +100,7 @@ class SendDownloadNode(BaseAgentNode):
             return {
                 "success": False,
                 "output": (
-                    f"Torrent {info_hash} already used by "
-                    f"subscription {duplicate.subscription_id}"
+                    f"Torrent {info_hash} already used by subscription {duplicate.subscription_id}"
                 ),
             }
 
@@ -112,7 +112,11 @@ class SendDownloadNode(BaseAgentNode):
         if not result.success:
             return {"success": False, "output": f"qBittorrent error: {result.error}"}
 
-        return {"success": True, "output": "Torrent added", "hash": result.data.get("hash", info_hash)}
+        return {
+            "success": True,
+            "output": "Torrent added",
+            "hash": result.data.get("hash", info_hash),
+        }
 
     async def _find_duplicate_owner(
         self, state: dict[str, Any], info_hash: str | None
@@ -129,7 +133,9 @@ class SendDownloadNode(BaseAgentNode):
                 return existing
         return None
 
-    def _build_result(self, action: Any, result: dict[str, Any], state: dict[str, Any]) -> dict[str, Any]:
+    def _build_result(
+        self, action: Any, result: dict[str, Any], state: dict[str, Any]
+    ) -> dict[str, Any]:
         matched = state.get("matched_torrent", {})
         if action.type == "add" and result.get("success"):
             return {
@@ -146,6 +152,7 @@ class SendDownloadNode(BaseAgentNode):
                 "status": "failed",
                 "errors": [f"Download failed: {result.get('output', 'Unknown')}"],
                 "torrent_failed_hashes": failed_hashes,
+                "_error_handler_node": self.NODE_NAME,
             }
 
         # Treat any non-success add as a retry_match so the matcher can pick

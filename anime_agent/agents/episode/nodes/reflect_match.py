@@ -22,7 +22,7 @@ from anime_agent.utils.logger import logger
 class ReflectMatchNode:
     """Reflect on low-confidence matches and decide the next step."""
 
-    AUTO_APPROVE_CONFIDENCE = 0.75
+    AUTO_APPROVE_CONFIDENCE = 0.6
 
     def __init__(self, llm_tool: BaseTool | None = None):
         self.llm_tool = llm_tool or LLMTool()
@@ -48,11 +48,36 @@ class ReflectMatchNode:
             )
             if t
         ]
+        low_confidence_count = state.get("low_confidence_count", 0)
 
         # If no candidates at all, broaden search rather than bothering a human.
         if not candidates:
             logger.info("No candidates to reflect on; triggering broader search")
             return {"status": "search_resources"}
+
+        available = [c for c in candidates if c.get("info_hash") not in failed_hashes]
+
+        # After repeated low-confidence rounds, trust the largest candidate
+        # instead of escalating to human review every time.
+        if low_confidence_count >= 2 and available:
+            matched = max(available, key=lambda c: c.get("size", 0))
+            info_hash = matched.get("info_hash")
+            logger.info(
+                "Auto-approving best candidate after {} low-confidence attempts for episode {}: hash={}",
+                low_confidence_count,
+                state.get("episode_number"),
+                info_hash,
+            )
+            return {
+                "status": "matched",
+                "matched_torrent": {
+                    "info_hash": info_hash,
+                    "title": matched.get("title"),
+                    "link": matched.get("link"),
+                    "confidence": 0.7,
+                },
+                "low_confidence_count": 0,
+            }
 
         prompt = self._build_prompt(
             candidates=candidates,
@@ -90,7 +115,7 @@ class ReflectMatchNode:
 
         if not result.success:
             logger.warning("Reflection LLM failed: {}; escalating to human review", result.error)
-            return {"status": "human_review", "requires_human": True}
+            return {"status": "human_review", "requires_human": True, "low_confidence_count": low_confidence_count + 1}
 
         decision = result.data.get("json", {})
         action = decision.get("action", "human_review")
@@ -118,19 +143,24 @@ class ReflectMatchNode:
                 }
 
         if action == "search_resources" and not state.get("resource_searched"):
-            logger.info("Reflection requested broader search for episode {}", state.get("episode_number"))
-            return {"status": "search_resources"}
+            logger.info(
+                "Reflection requested broader search for episode {}", state.get("episode_number")
+            )
+            return {"status": "search_resources", "low_confidence_count": low_confidence_count + 1}
 
         if action == "search_resources" and state.get("resource_searched"):
             logger.info(
                 "Reflection wanted search but already searched for episode {}; waiting for RSS",
                 state.get("episode_number"),
             )
-            return {"status": "schedule_resume"}
+            return {"status": "schedule_resume", "low_confidence_count": low_confidence_count + 1}
 
         if action == "wait":
-            logger.info("Reflection decided to wait for better candidates for episode {}", state.get("episode_number"))
-            return {"status": "schedule_resume"}
+            logger.info(
+                "Reflection decided to wait for better candidates for episode {}",
+                state.get("episode_number"),
+            )
+            return {"status": "schedule_resume", "low_confidence_count": low_confidence_count + 1}
 
         logger.info(
             "Reflection escalating episode {} to human review (action={}, confidence={:.2f})",
@@ -142,14 +172,16 @@ class ReflectMatchNode:
 
     def _system_msg(self) -> str:
         return (
-            "You are a cautious anime torrent matching agent. A previous matcher was uncertain, "
+            "You are a pragmatic anime torrent matching agent. A previous matcher was uncertain, "
             "so you must re-evaluate the candidates and decide the best next step.\n\n"
             "Rules:\n"
-            "1. Only auto_approve if the candidate clearly matches the episode and title.\n"
-            "2. Prefer well-known release groups and recent releases.\n"
-            "3. If candidates look sparse or off-topic, request search_resources.\n"
-            "4. If the episode is very new and RSS may not have caught up, choose wait.\n"
-            "5. Choose human_review only when genuinely ambiguous after considering all data.\n\n"
+            "1. Auto_approve when a candidate reasonably matches the episode and title; "
+            "   do not default to human_review unless multiple candidates are genuinely ambiguous.\n"
+            "2. If only one candidate is reasonable after filtering, prefer auto_approve.\n"
+            "3. Prefer well-known release groups and recent releases.\n"
+            "4. If candidates look sparse or off-topic, request search_resources.\n"
+            "5. If the episode is very new and RSS may not have caught up, choose wait.\n"
+            "6. Choose human_review only as a last resort when the match is truly ambiguous.\n\n"
             "Return JSON with action, info_hash (when auto_approve), confidence (0.0-1.0), and reason."
         )
 
