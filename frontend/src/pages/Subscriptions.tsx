@@ -67,7 +67,8 @@ export function Subscriptions() {
 
   // eslint-disable-next-line react-hooks/set-state-in-effect
   useEffect(() => { void load() }, [load])
-  usePolling(load, POLL_INTERVAL)
+  // 打开弹窗时暂停自动刷新，避免打断手动输入 / 选择候选
+  usePolling(load, POLL_INTERVAL, !showModal && !showCandidateDialog)
 
   async function handleSubmit(e: React.FormEvent) {
     e.preventDefault()
