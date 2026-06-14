@@ -3,8 +3,6 @@
 import json
 from unittest.mock import AsyncMock, MagicMock
 
-import pytest
-
 from anime_agent.agents.episode.nodes.match_torrent import MatchTorrentNode
 from anime_agent.tools.base import ToolOutput
 

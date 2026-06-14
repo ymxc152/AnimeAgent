@@ -21,7 +21,7 @@
 | Scheduler | ✅ 包含 | ✅ 已实现 | 启动预检、定时 tick、每周新番发现。 |
 | Web 面板 | ✅ 原生 HTML/JS | ✅ React/Vite/Tailwind CSS SPA | 功能等效，API 与页面已实现。 |
 | 人工断点（human_review） | ✅ 包含 | ✅ 已实现 | `reflect_match` 在持续低置信度或 LLM 失败时最终路由到 `human_review`。 |
-| 对话层（Conversational Agent） | ✅ MVP | ❌ 未实现 | `anime_agent/agents/conversational/` 为空；无 NLU / 多轮澄清 / 聊天 API。 |
+| 对话层（Conversational Agent） | ✅ MVP | ✅ 已实现 | 已提供基于规则的 NLU、StatusQueryService、模板回复与 `POST /api/chat` 端点；支持列表/进度/等种子/失败任务等查询。多轮澄清与自然语言订阅尚未实现。 |
 | 调度层 LangGraph（Orchestrator Graph） | ✅ 保留 | ❌ 未实现 | 调度以 `services/discovery.py` + `services/scheduler.py` 函数实现，非 LangGraph。 |
 | `process_metadata` 节点 | ✅ 合并节点 | ✅ 已实现 | 最小实现：根据订阅格式输出 `content_type`，后续可接入 TMDB 验证。 |
 | `notify_user` 节点 | ✅ 包含 | ✅ 已实现 | 在 `refresh_emby` 成功或 `handle_error` 后调用 `NotifyTool` 发送通知。 |
@@ -113,7 +113,7 @@
 | 人工断点 | `match_torrent` 已实现低置信度计数，`reflect_match` 节点在多次低置信度后路由到 `human_review`；状态与 API 可用。 |
 | `process_metadata` 节点 | 已实现；位于 `poll_download` 与 `organize_files` 之间，输出 `content_type`。 |
 | 通知用户节点 | 已实现；`refresh_emby` 成功与 `handle_error` 后触发 `notify_user`。 |
-| 对话查询统计 | 未实现。 |
+| 对话查询统计 | ✅ 已实现：规则意图解析 + StatusQueryService + `/api/chat` 端点。 |
 
 ### 前端体验优化与 qBittorrent 进度同步
 
@@ -148,7 +148,7 @@
 - **P0**：~~修复 `match_torrent` 低置信度逻辑；处理前端测试失败；清理 lint/type 错误~~ ✅ **已完成**。
 - **P1**：统一 `torrent_hash` / `torrent_info_hash`；`OrganizeFilesNode` 使用 Subscription 真实季数；`PollDownloadNode` 实现自适应轮询间隔。
 - **P2**：~~Discovery 改为 Bangumi 优先~~ ✅ **已完成**；~~Scheduler 增加播出时间门控~~ ✅ **已完成**；实现 `process_metadata` 与 `notify_user` 节点 ✅ **已完成**。
-- **P3**：实现最小对话层；按 OLD 设计补齐 Anime Garden 缓存、配置项与 StatusQueryService。
+- **P3**：~~实现最小对话层~~ ✅ **已实现**：StatusQueryService、规则意图解析与 `/api/chat` 端点已落地；Anime Garden 缓存与配置项已在前期补齐。
 
 ---
 

@@ -206,7 +206,8 @@ anime-agent/
 - [x] qBittorrent 进度主动同步（Scheduler tick 前同步下载状态与速度）
 - [x] 系列元数据解析（`SeriesMetadataResolver`）与统一系列文件夹结构
 - [x] 自动订阅规则（`AutoSubscribeRule`）与 LLM 辅助决策
-- [ ] 对话层（自然语言订阅、意图解析、多轮澄清）
+- [x] 对话层：状态查询（自然语言问进度 / 等种子 / 失败任务、`POST /api/chat`）
+- [ ] 对话层：自然语言订阅与多轮澄清
 - [x] `process_metadata` 节点（内容分类，TMDB 验证预留）
 - [x] `notify_user` 节点与真实通知推送（通过 Apprise）
 - [ ] 更多下载器支持（Transmission、Aria2 等）

@@ -207,3 +207,17 @@ class EpisodeDetailResponse(EpisodeResponse):
 
     torrent_candidates: list[dict[str, Any]] = []
     torrent_failed_hashes: list[str] = []
+
+
+class ChatRequest(BaseModel):
+    """Natural-language message to the conversational agent."""
+
+    message: str
+
+
+class ChatResponse(BaseModel):
+    """Reply from the conversational agent."""
+
+    reply: str
+    intent: dict[str, Any]
+    data: Any | None = None

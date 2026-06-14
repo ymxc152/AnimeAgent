@@ -14,6 +14,7 @@ from loguru import logger
 from sqlalchemy import func, select
 from sqlalchemy.ext.asyncio import AsyncSession
 
+from anime_agent.agents.conversational.agent import ConversationalAgent
 from anime_agent.config import settings
 from anime_agent.memory.database import get_db
 from anime_agent.memory.init_db import init_database
@@ -30,6 +31,8 @@ from anime_agent.web_schemas import (
     AutoSubscribeRuleCreateRequest,
     AutoSubscribeRuleResponse,
     AutoSubscribeRuleUpdateRequest,
+    ChatRequest,
+    ChatResponse,
     DiscoverySubscribeRequest,
     EpisodeDetailResponse,
     EpisodeResponse,
@@ -195,6 +198,18 @@ async def stats(db: AsyncSession = Depends(get_db)) -> dict[str, Any]:
             "failed": ep_failed or 0,
         },
     }
+
+
+@app.post("/api/chat", response_model=ChatResponse)
+async def chat(payload: ChatRequest, db: AsyncSession = Depends(get_db)) -> ChatResponse:
+    """Natural-language status query endpoint."""
+    agent = ConversationalAgent(db)
+    result = await agent.chat(payload.message)
+    return ChatResponse(
+        reply=result["reply"],
+        intent=result["intent"],
+        data=result["data"],
+    )
 
 
 @app.get("/api/subscriptions")

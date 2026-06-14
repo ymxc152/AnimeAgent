@@ -19,6 +19,7 @@
 - `ScheduleResumeNode` 区分 RSS 等待间隔与下载轮询间隔
 - `AnimeGardenTool` 补齐配置项（base URL、timeout、cache TTL），实现 1 小时内存缓存；`search_resources` 支持 fallback 开关与多页搜索
 - Episode Graph 新增 `process_metadata`（内容分类）与 `notify_user`（通知推送）节点
+- 对话统计层：`StatusQueryService`、规则意图解析、`ConversationalAgent` 与 `POST /api/chat` 端点，支持自然语言查询订阅进度、等种子任务与失败任务
 
 ### Improved (Frontend Experience)
 - 首页 `/api/subscriptions` 改为单次 JOIN 聚合查询，消除 N+1
@@ -31,5 +32,5 @@
 - 新增 Toast 成功提示、Episodes 筛选 URL 同步、RSS/Logs 自动刷新、骨架屏、前端测试覆盖
 
 ### Known Limitations
-- 对话层（自然语言聊天订阅）尚未实现
+- 对话层已支持状态查询；自然语言订阅与多轮澄清尚未实现
 - 完结检测服务已实现但尚未接入 Scheduler

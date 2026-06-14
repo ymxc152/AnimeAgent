@@ -76,7 +76,7 @@ class TestDefaultValues:
         """Should have default check_interval_seconds."""
         with patch.dict(os.environ, {}, clear=True):
             settings = Settings(_env_file=None)
-            assert settings.check_interval_seconds == 600
+            assert settings.check_interval_seconds == 60
 
     def test_default_log_level(self):
         """Should have default log_level."""
