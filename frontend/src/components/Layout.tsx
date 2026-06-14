@@ -1,3 +1,4 @@
+import { useState } from 'react'
 import { Link, NavLink, Outlet } from 'react-router-dom'
 import {
   LayoutDashboard,
@@ -7,9 +8,10 @@ import {
   Rss,
   ScrollText,
   Sparkles,
+  RefreshCw,
 } from 'lucide-react'
 import { useI18n } from '../i18n/useI18n'
-import { LanguageSwitch } from './ui'
+import { Button, LanguageSwitch } from './ui'
 
 const navItems = [
   { path: '/', key: 'dashboard', icon: LayoutDashboard },
@@ -22,6 +24,7 @@ const navItems = [
 
 export function Layout() {
   const { t } = useI18n()
+  const [refreshKey, setRefreshKey] = useState(0)
 
   return (
     <div className="flex min-h-screen flex-col">
@@ -65,6 +68,15 @@ export function Layout() {
           </nav>
 
           <div className="flex items-center gap-3">
+            <Button
+              variant="secondary"
+              size="sm"
+              onClick={() => setRefreshKey((k) => k + 1)}
+              title={t.common.refresh || 'Refresh'}
+              aria-label={t.common.refresh || 'Refresh'}
+            >
+              <RefreshCw className="h-4 w-4" />
+            </Button>
             <LanguageSwitch />
           </div>
         </div>
@@ -96,7 +108,7 @@ export function Layout() {
       </nav>
 
       <main className="mx-auto w-full max-w-7xl flex-1 px-4 py-8 sm:px-6 lg:px-8">
-        <div className="animate-fade-in">
+        <div className="animate-fade-in" key={refreshKey}>
           <Outlet />
         </div>
       </main>

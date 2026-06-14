@@ -18,9 +18,9 @@ import type {
 import { useI18n } from '../i18n/useI18n'
 import { usePolling } from '../hooks/usePolling'
 import { useToast } from '../hooks/useToast'
-import { Card, Button, Input, Select, Badge, EmptyState, Modal, SkeletonCard, FloatingActionButton } from '../components/ui'
+import { Card, Button, Input, Select, Badge, EmptyState, Modal, SkeletonCard } from '../components/ui'
 import { DiscoveryRuleForm } from './DiscoveryRuleForm'
-import { Compass, Search, Plus, Filter, X, Settings2, RefreshCw } from 'lucide-react'
+import { Compass, Search, Plus, Filter, X, Settings2 } from 'lucide-react'
 
 const SEASONS = ['WINTER', 'SPRING', 'SUMMER', 'FALL']
 const CACHE_KEY = 'animeagent-discovery-cache'
@@ -291,10 +291,16 @@ export function Discovery() {
             {year} {currentSeasonLabel} · {results.length} {t.discovery.animeCount}
           </p>
         </div>
-        <Button variant="secondary" onClick={() => setShowRules(true)}>
-          <Settings2 className="h-4 w-4" />
-          {t.discovery.autoSubscribeRules}
-        </Button>
+        <div className="flex items-center gap-2">
+          <Button variant="primary" onClick={startAddRule}>
+            <Plus className="h-4 w-4" />
+            {t.discovery.addRule}
+          </Button>
+          <Button variant="secondary" onClick={() => setShowRules(true)}>
+            <Settings2 className="h-4 w-4" />
+            {t.discovery.autoSubscribeRules}
+          </Button>
+        </div>
       </div>
 
       {/* Error banner */}
@@ -442,20 +448,6 @@ export function Discovery() {
         </div>
       )}
 
-      <FloatingActionButton
-        position="bottom-left"
-        variant="secondary"
-        icon={<RefreshCw className="h-5 w-5" />}
-        title={t.common.retry}
-        onClick={() => void handleSearch()}
-      />
-      <FloatingActionButton
-        position="bottom-right"
-        variant="primary"
-        icon={<Plus className="h-5 w-5" />}
-        label={t.discovery.addRule}
-        onClick={startAddRule}
-      />
 
       {/* Auto-subscribe rules modal */}
       {showRules && (

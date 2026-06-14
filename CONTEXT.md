@@ -1,0 +1,39 @@
+# AnimeAgent UI 上下文
+
+本词汇表定义 AnimeAgent Web 面板中反复出现的界面概念，确保前后端、文档与实现使用同一套语言。
+
+## Language
+
+**全局刷新 (Global Refresh)**
+触发当前页面数据重新加载的操作入口。位置固定在顶部导航栏右侧，以图标按钮呈现，不随页面滚动消失。
+_Avoid_: 页面底部悬浮刷新按钮、retry FAB
+
+**页面主操作 (Page Primary Action)**
+当前页面最重要的创建/添加操作。位置在每个页面顶部的页面标题行（Page Header）右侧，以普通 Button 呈现。
+_Avoid_: 悬浮圆形主操作按钮（FAB）、与标题分离的底部按钮
+
+**页面标题行 (Page Header)**
+每个页面顶部的标题 + 主操作按钮区域，用于承载页面级标题和 Page Primary Action。
+_Avoid_: 操作区、头部卡片
+
+**内联刷新 (Inline Refresh)**
+绑定到特定卡片、数据项或局部控件的刷新操作（如 Dashboard 健康检查卡片、订阅卡片元数据刷新、Logs 工具栏刷新），保留在对应组件内部，不属于 Global Refresh。
+_Avoid_: 把局部刷新和全局刷新混为一谈
+
+**悬浮操作按钮 / FAB (Floating Action Button)**
+固定于视口底部角落的圆形按钮。除后续明确需要的特殊场景外，本项目默认不使用 FAB，已由 Global Refresh + Page Primary Action 替代。
+_Avoid_: 默认把新增/刷新做成 FAB
+
+**内容安全区 (Content Safe Area)**
+页面主内容容器不再需要为底部悬浮按钮预留额外 padding；移除 FAB 后，列表最后一项不会被遮挡。
+_Avoid_: 底部内边距补偿、FAB 占位
+
+## Example dialogue
+
+> Dev: “Discovery 页面有两个 FAB，左下角刷新、右下角新增规则，会挡住最后一行内容。我想把刷新放到顶部导航栏，新增规则放到页面标题行。”
+>
+> Domain expert: “对。刷新是 Global Refresh，放在导航栏右侧；新增规则是这个页面的 Page Primary Action，放在 Page Header 的右侧。Discovery 的 Page Header 里已经有‘自动订阅规则’按钮，把‘新增规则’作为 Primary Button 放在它旁边或替换为直接打开规则的入口都可以。注意不要把 Logs 的局部刷新和内联刷新混用。”
+>
+> Dev: “那 Dashboard 的刷新 FAB 也要移走吗？”
+>
+> Domain expert: “是的。Dashboard 只有全局刷新需求，没有 Page Primary Action，所以只保留 Global Refresh 即可。Health 卡片里的刷新是 Inline Refresh，保留。”

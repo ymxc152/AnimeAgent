@@ -4,7 +4,7 @@ import { getStats, getToolsHealth } from '../api/client'
 import type { Stats, ToolHealth } from '../types'
 import { useI18n } from '../i18n/useI18n'
 import { usePolling } from '../hooks/usePolling'
-import { Card, StatCard, Badge, Loading, EmptyState, Button, FloatingActionButton } from '../components/ui'
+import { Card, StatCard, Badge, Loading, EmptyState, Button } from '../components/ui'
 import {
   ListVideo,
   PlayCircle,
@@ -187,16 +187,6 @@ export function Dashboard() {
         </Card>
       </div>
 
-      <FloatingActionButton
-        position="bottom-left"
-        variant="secondary"
-        icon={<RefreshCw className="h-5 w-5" />}
-        title={t.common.retry}
-        onClick={() => {
-          void loadStats()
-          void loadHealth()
-        }}
-      />
     </div>
   )
 }

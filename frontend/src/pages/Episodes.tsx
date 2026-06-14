@@ -20,7 +20,6 @@ import {
   EmptyState,
   Modal,
   MultiSelect,
-  FloatingActionButton,
 } from '../components/ui'
 import {
   PlayCircle,
@@ -395,13 +394,7 @@ export function Episodes() {
         </Modal>
       )}
 
-      <FloatingActionButton
-        position="bottom-left"
-        variant="secondary"
-        icon={<RefreshCw className="h-5 w-5" />}
-        title={t.common.retry}
-        onClick={() => void load()}
-      />
+
     </div>
   )
 }

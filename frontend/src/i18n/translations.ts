@@ -39,6 +39,7 @@ export const translations = {
       url: '链接',
       active: '启用',
       inactive: '未启用',
+      refresh: '刷新',
     },
     dashboard: {
       title: '概览',
@@ -273,6 +274,7 @@ export const translations = {
       url: 'URL',
       active: 'Active',
       inactive: 'Inactive',
+      refresh: 'Refresh',
     },
     dashboard: {
       title: 'Dashboard',

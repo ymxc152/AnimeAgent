@@ -11,7 +11,7 @@ import type { Subscription, SubscriptionCreateRequest } from '../types'
 import { useI18n } from '../i18n/useI18n'
 import { usePolling } from '../hooks/usePolling'
 import { useToast } from '../hooks/useToast'
-import { Card, Button, Input, Switch, Badge, Loading, EmptyState, Modal, Select, FloatingActionButton } from '../components/ui'
+import { Card, Button, Input, Switch, Badge, Loading, EmptyState, Modal, Select } from '../components/ui'
 import { Plus, Trash2, ListVideo, RefreshCw } from 'lucide-react'
 
 const POLL_INTERVAL = 5000
@@ -249,20 +249,6 @@ export function Subscriptions() {
         </div>
       )}
 
-      <FloatingActionButton
-        position="bottom-left"
-        variant="secondary"
-        icon={<RefreshCw className="h-5 w-5" />}
-        title={t.common.retry}
-        onClick={() => void load()}
-      />
-      <FloatingActionButton
-        position="bottom-right"
-        variant="primary"
-        icon={<Plus className="h-5 w-5" />}
-        label={t.subscriptions.addSubscription}
-        onClick={() => setShowModal(true)}
-      />
 
       {/* Add subscription modal */}
       {showModal && (
