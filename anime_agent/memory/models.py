@@ -40,6 +40,7 @@ class Subscription(Base):
     status = Column(String, default="ongoing")  # ongoing/completed/dropped
     source = Column(String, default="manual")  # manual / auto_discover
     auto_download_enabled = Column(Boolean, default=True)
+    fallback_to_resource_search = Column(Boolean, default=True)
     rss_source_id = Column(Integer, ForeignKey("rss_sources.id"))
 
     expected_airing_weekday = Column(Integer)

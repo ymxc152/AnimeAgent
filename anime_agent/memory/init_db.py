@@ -9,7 +9,7 @@ from anime_agent.memory.models import Base
 
 
 def _migrate_subscriptions_columns(connection: Any) -> None:
-    """Add series_title/season_number columns to existing subscriptions tables."""
+    """Add series_title/season_number/fallback_to_resource_search columns to existing subscriptions tables."""
     inspector = inspect(connection)
     columns = {col["name"] for col in inspector.get_columns("subscriptions")}
 
@@ -17,6 +17,8 @@ def _migrate_subscriptions_columns(connection: Any) -> None:
         connection.execute(text("ALTER TABLE subscriptions ADD COLUMN series_title VARCHAR"))
     if "season_number" not in columns:
         connection.execute(text("ALTER TABLE subscriptions ADD COLUMN season_number INTEGER DEFAULT 1"))
+    if "fallback_to_resource_search" not in columns:
+        connection.execute(text("ALTER TABLE subscriptions ADD COLUMN fallback_to_resource_search BOOLEAN DEFAULT 1"))
 
 
 def _migrate_episodes_columns(connection: Any) -> None:

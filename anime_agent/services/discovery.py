@@ -147,6 +147,9 @@ class DiscoveryService:
             season_number=series_meta.season_number,
             source="auto_discover",
             auto_download_enabled=True,
+            fallback_to_resource_search=self.resolver.should_fallback_to_resource_search(
+                anime, self.settings.resource_fallback_old_anime_days
+            ),
             expected_airing_weekday=self._infer_weekday(anime.get("air_date")),
         )
         subscription = await self.store.subscriptions.create(subscription)

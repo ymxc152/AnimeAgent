@@ -132,6 +132,9 @@ async def _create_subscription_from_payload(
         series_title=series_meta.series_title,
         season_number=series_meta.season_number,
         auto_download_enabled=True,
+        fallback_to_resource_search=resolver.should_fallback_to_resource_search(
+            details or {}, settings.resource_fallback_old_anime_days
+        ),
         source=source,
         rss_source_id=getattr(payload, "rss_source_id", None),
     )

@@ -92,6 +92,7 @@ class Settings(BaseSettings):
     anime_garden_timeout_seconds: int = 30
     anime_garden_cache_ttl_seconds: int = 3600
     resource_fallback_enabled: bool = True
+    resource_fallback_old_anime_days: int = 90
     resource_search_max_pages: int = 1
 
     # Notifications

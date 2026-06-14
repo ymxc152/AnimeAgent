@@ -1,5 +1,6 @@
 """Metadata resolver with Bangumi priority and AniList/TMDB fallback."""
 
+from datetime import UTC, datetime, timedelta
 from typing import Any
 
 from anime_agent.tools.anilist_tool import AniListTool, AniListToolInput
@@ -75,6 +76,31 @@ class MetadataResolver:
             return ToolOutput(success=False, error="Could not resolve metadata")
 
         return ToolOutput(success=True, data={"details": details})
+
+    def should_fallback_to_resource_search(
+        self, details: dict[str, Any], old_anime_days: int = 90
+    ) -> bool:
+        """Return True if the anime looks like an old/finished title.
+
+        Criteria:
+        - AniList status is FINISHED
+        - air_date/start_date is older than ``old_anime_days`` days
+        """
+        if details.get("status") == "FINISHED":
+            return True
+
+        air_date = details.get("air_date") or details.get("start_date")
+        if air_date:
+            try:
+                dt = datetime.fromisoformat(str(air_date))
+                if dt.tzinfo is None:
+                    dt = dt.replace(tzinfo=UTC)
+                if datetime.now(UTC) - dt > timedelta(days=old_anime_days):
+                    return True
+            except ValueError:
+                pass
+
+        return False
 
     async def get_seasonal(self, year: int, season: str) -> ToolOutput:
         """Fetch seasonal anime with Bangumi priority and AniList fallback."""

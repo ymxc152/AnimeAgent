@@ -57,3 +57,11 @@ class TestSubscriptionModel:
 
         auto_col = Subscription.__table__.columns["auto_download_enabled"]
         assert auto_col.default.arg is True
+
+        fallback_col = Subscription.__table__.columns["fallback_to_resource_search"]
+        assert fallback_col.default.arg is True
+
+    def test_subscription_has_fallback_to_resource_search_column(self):
+        """Subscription model should have fallback_to_resource_search column."""
+        column_names = [c.name for c in Subscription.__table__.columns]
+        assert "fallback_to_resource_search" in column_names
