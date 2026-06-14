@@ -183,9 +183,10 @@ class Scheduler:
                 )
                 continue
 
-            # Add delay between episodes to avoid RSS rate limiting
+            # Small stagger between episodes; RSS responses are cached for 5 minutes,
+            # so this is mainly to avoid overwhelming the local event loop.
             if i > 0:
-                await asyncio.sleep(5)
+                await asyncio.sleep(1)
 
             try:
                 final = await self.executor(sub_id, ep_number)
@@ -200,7 +201,17 @@ class Scheduler:
                     exc,
                 )
 
-        next_run = min(resume_times) if resume_times else self.planner.plan_next_run(subscription)
+        if resume_times:
+            next_run = min(resume_times)
+        elif any(
+            ep.status == "pending" and self._episode_has_aired(subscription, ep) for ep in episodes
+        ):
+            # There are aired episodes still pending: check again soon rather than
+            # waiting for the weekly airing slot.
+            next_run = now_naive + timedelta(minutes=15)
+        else:
+            next_run = self.planner.plan_next_run(subscription)
+
         schedule = await store.schedules.get_by_subscription(sub_id)
         if schedule is not None:
             await store.schedules.update_next_run(cast(int, schedule.id), next_run)
