@@ -106,6 +106,7 @@ class EpisodeGraphRunner:
             bangumi_data={},
             anilist_data={},
             tmdb_data=None,
+            tmdb_id=cast(int | None, subscription.tmdb_id),
             torrent_candidates=candidates,
             matched_torrent=matched_torrent,
             torrent_hash=cast(str | None, episode.torrent_hash),
@@ -115,7 +116,6 @@ class EpisodeGraphRunner:
             download_progress=0.0,
             classification=None,
             content_type="",
-            tmdb_id=None,
             confidence=0.0,
             verified=False,
             organized_path=cast(str | None, episode.organized_path),
@@ -196,7 +196,7 @@ class EpisodeGraphRunner:
             "torrent_failed_hashes",
             json.dumps(final.get("torrent_failed_hashes", [])),
         )
-        self._set(episode, "metadata_verified", bool(final.get("classification")))
+        self._set(episode, "metadata_verified", bool(final.get("verified") or final.get("classification")))
 
         errors = final.get("errors", [])
         if errors:
